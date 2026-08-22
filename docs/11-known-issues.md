@@ -938,6 +938,26 @@ Revisit once the worksheet is closer to the full 50 `docs/04` calls for.
 > not Smarthis's score** — the residual gap is now entirely a Stage B
 > question, tracked here, not reopened as a new entry.
 
+> **Stage B fix attempted and reverted, 2026-08-22 — real measured
+> regression, not shipped.** Wrote `prompts/stage-b-matching.v5.md`, adding
+> an instruction for requirements stating alternatives (the exact shape
+> `a-v5` now produces), and re-ran calibration with only
+> `STAGE_B_PROMPT_VERSION` changed, `a-v5` held fixed. Result: **parse-
+> failure rate 0% → 72%** (5/18 scored, down from 18/18) — a real
+> regression, not noise, since failures did not recover across retries the
+> way ordinary transient provider errors do. Reverted to `b-v4` the same
+> session, before it ever reached Atlas. Working hypothesis (not yet
+> confirmed by an isolated reproduction the way B6's root cause was):
+> Stage B's 300-token `reasoning.max_tokens` cap (ADR-052) was sized
+> against `b-v4`'s shorter instructions, and the new alternatives
+> paragraph gives the model more to reason through before writing JSON,
+> consistently exceeding that fixed ceiling rather than occasionally
+> tripping on it. Full record, including candidates for a leaner retry not
+> pursued this session, kept in the prompt file itself (a-v4/a-v5's own
+> convention — every version stays on disk, including ones that did not
+> ship). **Smarthis's residual Stage B gap stays open**, now with one
+> documented dead end.
+
 > **`workAvailability` profile field added, 2026-08-19.** Closes the
 > Smarthis work-mode gap above: `profile.ts` gained a fourth declared
 > field alongside `englishLevel`/`minimumStipend`/`maxWeeklyHours`,
