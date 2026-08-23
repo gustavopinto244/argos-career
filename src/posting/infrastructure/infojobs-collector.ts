@@ -97,17 +97,40 @@ function buildListingUrl(criteria: InfoJobsCollectorCriteria): string {
   return `${BASE_URL}/${path}`;
 }
 
+/**
+ * The **`JobPosting`** block specifically, not merely the first
+ * `application/ld+json` script on the page.
+ *
+ * Every real detail page sampled during discovery (ADR-063) carried
+ * exactly one such block, and it was the `JobPosting` — so a
+ * take-the-first implementation worked. It would keep working right up
+ * until InfoJobs adds the `BreadcrumbList` or `Organization` block that
+ * job sites commonly render *before* the posting one, at which point
+ * every posting would silently fail schema validation and the source
+ * would look empty rather than broken. That is precisely the
+ * indistinguishable-failure shape `docs/11-known-issues.md` B13 was
+ * about, so it is checked rather than assumed.
+ */
 function extractJobPostingJsonLd(detailHtml: string): unknown | null {
-  const match =
-    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(
-      detailHtml,
-    );
-  if (!match) return null;
-  try {
-    return JSON.parse(match[1]!) as unknown;
-  } catch {
-    return null;
+  const blocks = detailHtml.matchAll(
+    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g,
+  );
+  for (const block of blocks) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(block[1]!) as unknown;
+    } catch {
+      continue;
+    }
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      (parsed as { "@type"?: unknown })["@type"] === "JobPosting"
+    ) {
+      return parsed;
+    }
   }
+  return null;
 }
 
 /**
@@ -221,7 +244,24 @@ export class InfoJobsCollector implements CollectorPort {
           continue;
         }
 
-        const merged = { ...jsonLd, id: card.id, jobUrl: detailUrl };
+        // `isRemoteQuery` is this collector's own annotation, not
+        // InfoJobs's — the same shape `id`/`jobUrl` already are. It carries
+        // one fact the JSON-LD genuinely cannot: that this posting came
+        // back from InfoJobs's **own** `-trabalho-home-office` facet, which
+        // is the source asserting the role is home-office. Without it the
+        // normalizer can only see the employer's physical address, and a
+        // genuinely remote São Paulo posting is rejected by the pre-filter's
+        // location rule — measured, not theorised: 2 of 5 real postings from
+        // the live remote query were lost exactly this way before this
+        // existed. Reading a source-declared fact, not mining prose for one
+        // (CLAUDE.md §15) — a "Home Office" mention in a title or
+        // description is still deliberately ignored.
+        const merged = {
+          ...jsonLd,
+          id: card.id,
+          jobUrl: detailUrl,
+          isRemoteQuery: criteria.isRemoteWork === true,
+        };
         const parsed = InfoJobsJobSchema.safeParse(merged);
         if (!parsed.success) {
           schemaRejectedCount += 1;

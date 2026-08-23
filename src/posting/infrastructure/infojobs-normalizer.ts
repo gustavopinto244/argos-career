@@ -34,13 +34,22 @@ function parseDate(value: string | null | undefined): Date | null {
  * null-on-anything-unparseable contract as every other normalizer
  * (principle 1).
  *
- * `workMode` is always `"unknown"` — InfoJobs's `JobPosting` states only a
- * physical `jobLocation`, never a structured remote/hybrid/onsite signal
- * (`infojobs-schema.ts`'s own doc comment explains why this is not
- * text-mined from `description`). ADR-011's leniency rule already treats
- * an unknown work mode correctly: it does not rescue a posting whose city
- * is known and outside the target metro, and does not block one whose
- * city is unknown either.
+ * `workMode` is `"remote"` when the collector reports this posting came
+ * back from InfoJobs's own `-trabalho-home-office` facet
+ * (`isRemoteQuery` — the source asserting the role is home-office), and
+ * `"unknown"` otherwise. Never `"onsite"` or `"hybrid"`: InfoJobs's
+ * `JobPosting` states only a physical `jobLocation`, and the free-text
+ * "Modelo de trabalho: Híbrido" mention is deliberately not mined
+ * (`infojobs-schema.ts`'s own doc comment). ADR-011's leniency rule
+ * already treats an unknown work mode correctly: it does not rescue a
+ * posting whose city is known and outside the target metro, and does not
+ * block one whose city is unknown either.
+ *
+ * Getting this wrong was measured, not hypothetical. While `workMode` was
+ * unconditionally `"unknown"`, every posting from the two remote queries
+ * in `config/criteria.yaml` was rejected by that same location rule, on
+ * the employer's physical address — 2 of 5 postings in a live run, which
+ * made those queries structurally incapable of ever contributing one.
  */
 export function normalizeInfoJobsJob(
   raw: RawPosting,
@@ -60,7 +69,7 @@ export function normalizeInfoJobsJob(
       company,
       title: job.title,
       location: mapLocation(job),
-      workMode: "unknown",
+      workMode: job.isRemoteQuery === true ? "remote" : "unknown",
       applicationDeadline: parseDate(job.validThrough),
       publishedAt: parseDate(job.datePosted),
       description: cleanDescription(job.description),

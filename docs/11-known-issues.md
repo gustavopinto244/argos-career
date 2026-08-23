@@ -1692,8 +1692,10 @@ passthrough-only metadata.
    lowercase names the schema required — matching the already-documented
    `Subject`/`ReceivedAt`/`ExtractedAt`. **Not a confirmed raw-JSON
    capture** — the pasted evidence is a rendered table row, not the HTTP
-   Request node's literal body — so this is the best-supported hypothesis,
-   flagged as such in the code, not asserted as verified fact.
+   Request node's literal body — so this is _a_ hypothesis, flagged as
+   such in the code, not asserted as verified fact. **See the audit
+   correction at the end of this entry: it is not the only hypothesis the
+   evidence supports, and this entry originally implied it was.**
 2. **Missing `sourceId`.** Directly confirmed, not hypothesized:
    `posting_events.source_id` was `null` for every one of the 33 rejected
    items across all three runs. Whatever n8n sends, the envelope's
@@ -1777,3 +1779,127 @@ genuinely at or near zero, not merely unmeasured before now.
 > entries are untouched: this is a query-budget decision, not a code
 > retirement, and re-adding the nine queries is the entire reversal cost.
 > Full measurement in ADR-031 Amendment 1.
+
+> **Audit correction, 2026-08-23 — this entry overstated its own
+> confidence, and the fix had a hole.** Re-examining the evidence during a
+> post-merge audit of the same session's work: `source_id` was recorded as
+> **`null`**, not `""`, for all 33 rejected items. `PostingEventsRepository`
+> writes `event.sourceId ?? null`, and `"" ?? null` is `""` — so a
+> null means `raw.sourceId` was `undefined`, which **rules out** an
+> envelope carrying an empty `sourceId` but leaves _two_ shapes equally
+> supported, not one:
+>
+> - **B** — an envelope `{ payload: {...} }` with no `sourceId` key. What
+>   this entry's fix assumed and covered.
+> - **A** — a **flat** item (`{ Title, Company, Location, Link }`) with no
+>   `{ sourceId, payload }` envelope at all. `raw.payload` is then
+>   `undefined`, the schema rejects it, and `source_id` records `null` —
+>   fitting the observed data exactly as well as B does.
+>
+> Verified by replaying all four plausible shapes through the shipped
+> normalizer: A was still rejected, B/C/D passed. In other words the fix
+> as merged would have silently continued losing every posting if A were
+> the true shape — and nothing in the evidence said it wasn't.
+>
+> **Closed by making the ingest boundary tolerate both** (`payloadOf` in
+> `executeIngestExternal`): an item with no `payload` key is treated as
+> being the payload. Purely additive — Indeed and every other caller that
+> does send `payload` is unaffected, verified by test. All four shapes now
+> normalize, with `sourceId` recovered from the link in each.
+>
+> The `payloadKeys`/`hasSourceId` diagnostic this entry already added is
+> still what will finally say which shape n8n really sends, on the next
+> real delivery. At that point the fallback can be kept as deliberate
+> tolerance or removed as dead code — decided with evidence rather than,
+> as here, with a hypothesis that read more confident than it was.
+
+---
+
+## B18 — InfoJobs's remote queries could never deliver a posting
+
+**Status:** fixed, verified against the live site · **Found:** 2026-08-23,
+auditing ADR-063's own merge
+
+`config/criteria.yaml` ships two InfoJobs queries against InfoJobs's
+`-trabalho-home-office` facet, whose entire purpose is finding remote
+postings outside the Rio metro. They were structurally incapable of
+delivering one.
+
+`InfoJobsNormalizer` mapped `workMode` to `"unknown"` unconditionally —
+correct in itself, since the detail page's JSON-LD states no
+remote/hybrid/onsite field and CLAUDE.md §15 forbids mining the free-text
+"Modelo de trabalho" mention for one. But the pre-filter's location rule
+(`isLocationAllowed`, ADR-011 Amendment 3) then judged those postings on
+the employer's **physical address**, which for a remote role is wherever
+the company happens to be. A genuinely remote São Paulo internship was
+rejected `location_not_allowed`.
+
+Measured against the live site, not reasoned about: of 5 real postings the
+remote query returned, **2 were rejected purely on location** — both
+on-track (`automation`) — and **0 passed**. Isolated the cause by
+re-running the same posting with `workMode` forced to `remote`: it passed,
+nothing else changed.
+
+> **Fixed, 2026-08-23.** `InfoJobsCollector` annotates each merged payload
+> with `isRemoteQuery` — recording that InfoJobs itself returned the
+> posting from its own home-office facet, the same kind of collector-added
+> field `id`/`jobUrl` already are. `InfoJobsNormalizer` maps that to
+> `workMode: "remote"`, everything else to `"unknown"`, and still never
+> infers `onsite`/`hybrid`. This reads a **source-declared** fact, not
+> prose: a "Home Office" mention in a title or description is still
+> ignored, with a regression test pinning that.
+>
+> Verified against the same live query that exposed it: `location_not_allowed`
+> went 2 → **0**, and **2 real on-track remote internships now pass** that
+> previously could not. The other 3 stayed correctly rejected on their own
+> axes (`too_old`, `track_unknown`, `title_missing_required_term`) — the
+> fix loosened nothing else.
+
+**Also hardened while here, latent rather than observed:**
+`extractJobPostingJsonLd` took the **first** `application/ld+json` block on
+the detail page without checking `@type`. Every real page sampled carries
+exactly one, and it is the `JobPosting` — so this worked, and would have
+kept working until InfoJobs added the `BreadcrumbList` or `Organization`
+block job sites commonly render first, at which point every posting would
+fail schema validation and the source would look _empty_ rather than
+_broken_ — B13's exact failure shape. Now it scans for the `JobPosting`
+block specifically, with tests for both the multi-block and no-JobPosting
+cases.
+
+---
+
+## B19 — One failing Indeed search term discarded every other term's results
+
+**Status:** fixed, proven with a stubbed jobspy · **Found:** 2026-08-23,
+auditing ADR-060's own merge
+
+ADR-060 made `collect.py` run several search terms per invocation. The loop
+called `scrape_term` with no error handling, so a single `scrape_jobs`
+raising — a network blip, Indeed rate-limiting one query, a parse error
+inside jobspy — propagated straight out of `main`. Everything already
+collected from earlier terms was discarded unsent, and later terms never
+ran.
+
+This is a regression ADR-060 itself introduced: before multi-term, a crash
+lost one term's results because one term was all there was. After it, a
+crash on term 3 of 5 loses terms 1 and 2 as well.
+
+Proven, not inferred — stubbed `jobspy` inside the real image so term 3 of
+4 raised: terms 1 and 2 returned real rows, **0 ingest POSTs were made**,
+and term 4 never ran.
+
+> **Fixed, 2026-08-23.** Each term's scrape is individually guarded: a
+> failing term is logged loudly, recorded in `failed_terms`, and the run
+> continues with whatever succeeded — the same "a broken source degrades,
+> it does not take everything down" rule (principle 1) the Node collectors
+> follow, applied within a single multi-term run.
+>
+> **And the opposite failure, which the first fix would have created:** if
+> _every_ term fails, exiting 0 with "nothing to ingest" would make a
+> fully-broken collector indistinguishable from a source with nothing new
+> — precisely B13's six-silent-days blind spot. An all-terms-failed run now
+> exits non-zero so systemd records a real failure.
+>
+> Re-run against the same harness: one term of four failing now ingests the
+> other three (3 postings, HTTP 201) with a warning; all four failing exits
+> non-zero and ingests nothing.

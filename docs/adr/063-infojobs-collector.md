@@ -90,11 +90,24 @@ single query returns ~20 real cards today, bounded by `maxResults`, and
 nothing about the collector's shape prevents adding real pagination later
 if a working parameter is ever found.
 
-**`workMode` is always `"unknown"`.** InfoJobs states only a physical
-address, never a structured remote/hybrid/onsite field — a title or
-description mentioning "Home Office" is not read as evidence of anything
-structural (CLAUDE.md §15). ADR-011's leniency rule already handles an
-unknown work mode correctly.
+**`workMode` is `"remote"` only when InfoJobs's own home-office facet
+returned the posting, `"unknown"` otherwise.** InfoJobs's JSON-LD states
+only a physical address, never a structured remote/hybrid/onsite field —
+a title or description mentioning "Home Office" is not read as evidence of
+anything structural (CLAUDE.md §15). What _is_ read is which listing facet
+the collector queried: a posting returned from `-trabalho-home-office` is
+InfoJobs asserting the role is home-office, and the collector records that
+as `isRemoteQuery` on the merged payload (the same kind of collector-added
+field `id`/`jobUrl` already are).
+
+**This was originally `"unknown"` unconditionally, and that was a real bug
+— see `docs/11-known-issues.md` B18.** The pre-filter then judged remote
+postings on the employer's physical address, so both remote queries in
+`config/criteria.yaml` were structurally incapable of ever delivering a
+posting: measured live, 2 of 5 real postings rejected purely on location,
+0 passing. After the fix, 0 rejected on location and 2 real on-track
+remote internships pass. Caught in a post-merge audit of this ADR, not in
+production.
 
 **Queries, measured before shipping**, the same discipline every prior
 source's query list in `criteria.yaml` uses. Bare tech words with no
@@ -165,3 +178,13 @@ by `maxResults` (default 20) for exactly this reason.
 **Reversal cost:** low — delete the four source files, two registry
 lines, and the `criteria.yaml` block; nothing elsewhere depends on
 InfoJobs existing.
+
+**Amendment 1 — 2026-08-23, post-merge audit.** Two defects in this ADR's
+own merged code, both found by auditing it rather than by running it in
+production, both recorded in `docs/11-known-issues.md` B18: the remote
+`workMode` bug described above (fixed, verified live), and
+`extractJobPostingJsonLd` taking the first `application/ld+json` block
+without checking `@type` (hardened — latent, since every real page
+sampled carries exactly one block and it is the `JobPosting`, but the
+failure mode would have been every posting silently rejected with the
+source looking empty rather than broken).

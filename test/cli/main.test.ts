@@ -12,8 +12,10 @@ import {
   executeDeliver,
   executeIngestExternal,
   executeStudyPlan,
+  type ExternalRawPosting,
 } from "../../src/cli/main";
 import { createPosting, Posting } from "../../src/posting/domain/posting";
+import { normalizeLinkedinAlertJob } from "../../src/posting/infrastructure/linkedin-alert-normalizer";
 import { Taxonomy } from "../../src/market/domain/taxonomy";
 import { TextNotifier } from "../../src/delivery/infrastructure/telegram-notifier";
 import {
@@ -1280,6 +1282,42 @@ describe("executeIngestExternal", () => {
 
     const run = new RunsRepository(db).findById(outcome.runId);
     expect(parseTruncatedSources(run!)).toEqual([]);
+  });
+
+  it("treats a flat item with no payload key as the payload itself (docs/11 B15)", async () => {
+    // Every rejected LinkedIn item in production recorded source_id as
+    // null, not "" -- which rules out an envelope carrying an empty
+    // sourceId, but leaves "envelope without sourceId" and "flat item,
+    // no envelope at all" equally supported. B15's own fix covered the
+    // first; this covers the second, so the path works whichever n8n
+    // actually sends. Additive: a caller that does send `payload` (every
+    // one in this repository) is unaffected.
+    // The real LinkedIn normalizer, not the fake one above: the whole
+    // point is whether the genuine production path survives this shape.
+    const outcome = await executeIngestExternal(
+      db,
+      "linkedin",
+      normalizeLinkedinAlertJob,
+      [
+        // Flat: the job's own fields, no { sourceId, payload } wrapper,
+        // Title Case as the real pasted n8n row showed.
+        {
+          Title: "Estágio Backend",
+          Company: "Empresa X",
+          Location: "Rio de Janeiro, RJ (Híbrido)",
+          Link: "https://www.linkedin.com/jobs/view/4451703964/",
+        } as unknown as ExternalRawPosting,
+      ],
+      () => NOW,
+    );
+
+    expect(outcome.normalized).toBe(1);
+    expect(outcome.unnormalizable).toBe(0);
+
+    const [stored] = new PostingsRepository(db).findActive();
+    expect(stored?.company).toBe("Empresa X");
+    // sourceId recovered from the link, since the flat shape carries none.
+    expect(stored?.sourceId).toBe("4451703964");
   });
 
   it("counts an item the normalizer rejects as unnormalizable, not a thrown error", async () => {

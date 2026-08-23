@@ -141,6 +141,17 @@ still within ADR-028's accepted exception (scoped to this library and this
 host, not to request volume), but worth remembering if Indeed's own
 rate-limiting ever tightens; nothing here measures that risk.
 
+**Amendment 1 — 2026-08-23, post-merge audit.** This ADR's own loop had
+no per-term error handling, so one `scrape_jobs` raising discarded every
+term that had already succeeded and skipped every term after it — a
+regression this change introduced, since before multi-term a crash lost
+one term's results because one term was all there was. Proven with a
+stubbed jobspy inside the real image (two terms returned rows, zero
+ingest POSTs made), fixed by guarding each term individually, and paired
+with a non-zero exit when _every_ term fails so a fully-broken run cannot
+look like a quiet one (B13's blind spot). Full record:
+`docs/11-known-issues.md` B19.
+
 **Reversal cost:** low. Deleting `DEFAULT_SEARCH_TERMS` and
 `resolve_search_terms`'s list branch returns to the original one-term
 behavior; `SEARCH_TERM` alone still works throughout.

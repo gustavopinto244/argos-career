@@ -67,12 +67,48 @@ describe("normalizeInfoJobsJob", () => {
     expect(posting?.location).toEqual({ kind: "unknown" });
   });
 
-  it("workMode is always unknown — InfoJobs states no structured remote/hybrid/onsite signal", () => {
+  it("workMode is unknown when the posting did not come from the remote facet", () => {
     const posting = normalizeInfoJobsJob(
       rawPosting({
         id: "1",
         title: "Estágio em TI | Home Office",
         hiringOrganization: { name: "Empresa X" },
+      }),
+      NOW,
+    );
+    // "Home Office" in the title is deliberately NOT mined (CLAUDE.md §15).
+    expect(posting?.workMode).toBe("unknown");
+  });
+
+  it("workMode is remote when the collector reports InfoJobs's own remote facet", () => {
+    // Regression guard for a measured bug: while this was unconditionally
+    // "unknown", every posting from the two remote queries in
+    // config/criteria.yaml was rejected by the pre-filter's location rule
+    // on the employer's physical address, making those queries incapable
+    // of ever contributing a posting.
+    const posting = normalizeInfoJobsJob(
+      rawPosting({
+        id: "1",
+        title: "Estágio em TI",
+        hiringOrganization: { name: "Empresa X" },
+        jobLocation: { address: { addressLocality: "São Paulo" } },
+        isRemoteQuery: true,
+      }),
+      NOW,
+    );
+    expect(posting?.workMode).toBe("remote");
+    // The physical address is still recorded honestly alongside it.
+    expect(posting?.location).toEqual({ kind: "known", city: "São Paulo" });
+  });
+
+  it("never infers onsite or hybrid — InfoJobs states neither structurally", () => {
+    const posting = normalizeInfoJobsJob(
+      rawPosting({
+        id: "1",
+        title: "Estágio em TI",
+        hiringOrganization: { name: "Empresa X" },
+        description: "Modelo de trabalho: Híbrido (2x home office).",
+        isRemoteQuery: false,
       }),
       NOW,
     );
