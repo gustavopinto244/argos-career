@@ -22,12 +22,14 @@ Required environment:
   ARGOS_INGEST_API_KEY   an Indeed-only ingest credential
 
 Optional environment (defaults below):
-  SEARCH_TERM, LOCATION, COUNTRY_INDEED, RESULTS_WANTED
+  SEARCH_TERMS (comma-separated; SEARCH_TERM singular still accepted, see
+  below), LOCATION, COUNTRY_INDEED, RESULTS_WANTED, DRY_RUN, DRY_RUN_OUTPUT
 """
 
 import json
 import os
 import sys
+import time
 
 import requests
 from jobspy import scrape_jobs
@@ -43,9 +45,51 @@ from jobspy import scrape_jobs
 # narrow -- 0 and 3 rows respectively, the same near-zero-volume trap
 # criteria.yaml's own Gupy query comments already document.
 DEFAULT_SEARCH_TERM = "estagio ti"
+
+# Multi-term default (ADR-060, 2026-08-23), measured with
+# `npm run probe:indeed` against a real `--dry-run` scrape (50 rows/term,
+# Rio de Janeiro) applying the *real* pre-filter/track/location rules, not a
+# title-only guess. Kept alongside DEFAULT_SEARCH_TERM (still the fallback
+# when only the singular SEARCH_TERM is set) so `resolve_search_terms`'s
+# precedence is legible from the constants alone:
+#
+#   term                              rows  on-track, in-region
+#   estagio ti                          50  9   (already the sole default)
+#   estagio desenvolvimento             50  2
+#   estagio suporte                     50  3
+#   estagio seguranca da informacao     50  2
+#   estagio infraestrutura              32  4
+#
+# Deliberately NOT added, both measured with real volume and titles that
+# genuinely classify onto a track, but zero net after the full pre-filter
+# (location/age), not zero because the term is off-topic:
+#   estagio dados          "ESTAGIÁRIO DE TI | DESENVOLVIMENTO" classified
+#                           dev+automation but failed location_not_allowed;
+#                           track `data` (planned, not yet built) would
+#                           likely change this term's yield -- re-probe once
+#                           it lands.
+#   estagio programador    real dev-track hits (BairesDev's Node.js/Java/
+#                           React trainee postings) but all failed too_old
+#                           -- these listings were already stale the day
+#                           they were probed, a source characteristic, not
+#                           a term problem.
+DEFAULT_SEARCH_TERMS = [
+    DEFAULT_SEARCH_TERM,
+    "estagio desenvolvimento",
+    "estagio suporte",
+    "estagio seguranca da informacao",
+    "estagio infraestrutura",
+]
 DEFAULT_LOCATION = "Rio de Janeiro, Brazil"
 DEFAULT_COUNTRY_INDEED = "Brazil"
 DEFAULT_RESULTS_WANTED = "50"
+
+# Pause between terms within one run, same politeness discipline
+# `criteria.yaml`'s `collection.queryIntervalMs` applies to Gupy/Sólides
+# queries (CLAUDE.md §6) -- ADR-028's exception is scoped to the single
+# `apis.indeed.com` request shape jobspy makes, not to hammering it back to
+# back with no gap between terms.
+TERM_INTERVAL_SECONDS = 3
 
 
 def env(name: str, default: str | None = None, required: bool = False) -> str:
@@ -56,8 +100,64 @@ def env(name: str, default: str | None = None, required: bool = False) -> str:
     return value or ""
 
 
+def resolve_search_terms() -> list[str]:
+    """`SEARCH_TERMS` (plural, comma-separated) takes priority; falls back to
+    the original singular `SEARCH_TERM` for compatibility with any
+    deployment that already sets it (a real request for exactly one term
+    should not silently become five); and only then to
+    `DEFAULT_SEARCH_TERMS`. Whitespace-only entries are dropped rather than
+    sent to jobspy as an empty-string search.
+
+    The default is the new *list*, not the old single term -- the same call
+    B13's follow-up made for `DEFAULT_SEARCH_TERM` itself ("the fix is the
+    new default, not a config edit that could drift from a future fresh
+    install"): Atlas's real `.env` carries no `SEARCH_TERM`/`SEARCH_TERMS`
+    override today, so changing the default is what actually reaches
+    production.
+    """
+    plural = os.environ.get("SEARCH_TERMS")
+    if plural:
+        terms = [t.strip() for t in plural.split(",") if t.strip()]
+        if terms:
+            return terms
+    singular = os.environ.get("SEARCH_TERM")
+    if singular and singular.strip():
+        return [singular.strip()]
+    return DEFAULT_SEARCH_TERMS
+
+
+def scrape_term(
+    term: str, location: str, country_indeed: str, results_wanted: int
+) -> tuple[list[dict], bool]:
+    """One term, one `scrape_jobs` call. Returns the rows (already converted
+    through `to_json`/`json.loads`, matching `main`'s previous single-term
+    conversion) and whether this term alone looks truncated at its own
+    budget -- the same heuristic `main` used before multi-term existed,
+    applied per term because jobspy gives no other signal
+    (docs/audit PR-015).
+    """
+    print(f"jobspy: searching Indeed for '{term}' in '{location}' (up to {results_wanted})")
+    jobs = scrape_jobs(
+        site_name=["indeed"],
+        search_term=term,
+        location=location,
+        country_indeed=country_indeed,
+        results_wanted=results_wanted,
+    )
+    print(f"jobspy: {len(jobs)} rows returned for '{term}'")
+    if len(jobs) == 0:
+        return [], False
+    # jobspy returns a pandas DataFrame; round-tripping through its own
+    # to_json is what turns NaN into proper JSON null (a bare json.dumps on
+    # the DataFrame's dict form does not) — the same conversion used to
+    # capture the real fixture this source's schema/normalizer were fitted
+    # against (ADR-027).
+    rows = json.loads(jobs.to_json(orient="records", date_format="iso"))
+    return rows, len(jobs) >= results_wanted
+
+
 def main() -> None:
-    search_term = env("SEARCH_TERM", DEFAULT_SEARCH_TERM)
+    search_terms = resolve_search_terms()
     location = env("LOCATION", DEFAULT_LOCATION)
     country_indeed = env("COUNTRY_INDEED", DEFAULT_COUNTRY_INDEED)
     try:
@@ -66,51 +166,72 @@ def main() -> None:
         raise SystemExit("ERROR: RESULTS_WANTED must be a positive integer") from cause
     if results_wanted <= 0:
         raise SystemExit("ERROR: RESULTS_WANTED must be a positive integer")
-    api_url = env("ARGOS_API_URL", required=True).rstrip("/")
-    api_key = env("ARGOS_INGEST_API_KEY", required=True)
+
+    # DRY_RUN skips the ingest POST entirely and, instead of talking to
+    # argos-career, writes every scraped row to a mounted file — the input
+    # `scripts/probe-indeed-terms.ts` reads to measure a candidate term
+    # against the *real* pre-filter/track rules before it ever earns a spot
+    # in SEARCH_TERMS (same "measure before adding" discipline ADR-018 and
+    # B13's follow-up already used for Gupy/Indeed). Neither
+    # ARGOS_API_URL nor ARGOS_INGEST_API_KEY is required in this mode.
+    dry_run = env("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+
+    api_url = ""
+    api_key = ""
+    if not dry_run:
+        api_url = env("ARGOS_API_URL", required=True).rstrip("/")
+        api_key = env("ARGOS_INGEST_API_KEY", required=True)
+
+    all_rows: list[dict] = []
+    seen_ids: set[str] = set()
+    any_truncated = False
+    per_term_rows: dict[str, list[dict]] = {}
+    for index, term in enumerate(search_terms):
+        if index > 0:
+            time.sleep(TERM_INTERVAL_SECONDS)
+        rows, truncated = scrape_term(term, location, country_indeed, results_wanted)
+        any_truncated = any_truncated or truncated
+        per_term_rows[term] = rows
+        for row in rows:
+            row_id = row.get("id")
+            # Dedup across terms before ever building the postings list --
+            # two terms can legitimately return the same real posting
+            # (e.g. "estagio ti" and a future overlapping term), and a
+            # duplicate sourceId in one ingest batch is wasted, not merely
+            # redundant.
+            if row_id and row_id not in seen_ids:
+                seen_ids.add(row_id)
+                all_rows.append(row)
 
     print(
-        f"jobspy: searching Indeed for '{search_term}' in '{location}' "
-        f"(up to {results_wanted})"
+        f"jobspy: {len(all_rows)} unique rows across {len(search_terms)} "
+        f"term(s) ({', '.join(search_terms)})"
     )
-    jobs = scrape_jobs(
-        site_name=["indeed"],
-        search_term=search_term,
-        location=location,
-        country_indeed=country_indeed,
-        results_wanted=results_wanted,
-    )
-    print(f"jobspy: {len(jobs)} rows returned")
 
-    if len(jobs) == 0:
-        print("nothing to ingest, exiting")
+    if dry_run:
+        output_path = env("DRY_RUN_OUTPUT", "/app/output/dry-run.json")
+        with open(output_path, "w", encoding="utf-8") as handle:
+            json.dump(
+                {"terms": search_terms, "perTerm": per_term_rows, "rows": all_rows},
+                handle,
+            )
+        print(f"DRY_RUN: wrote {len(all_rows)} rows to {output_path}, not ingesting")
         return
 
-    # jobspy returns a pandas DataFrame; round-tripping through its own
-    # to_json is what turns NaN into proper JSON null (a bare json.dumps on
-    # the DataFrame's dict form does not) — the same conversion used to
-    # capture the real fixture this source's schema/normalizer were fitted
-    # against (ADR-027).
-    rows = json.loads(jobs.to_json(orient="records", date_format="iso"))
+    if len(all_rows) == 0:
+        print("nothing to ingest, exiting")
+        return
 
     # jobspy's own row id is the natural sourceId — stable per posting, the
     # same field the normalizer's schema requires.
     postings = [
-        {"sourceId": row["id"], "payload": row} for row in rows if row.get("id")
+        {"sourceId": row["id"], "payload": row} for row in all_rows if row.get("id")
     ]
-    skipped = len(rows) - len(postings)
+    skipped = len(all_rows) - len(postings)
     if skipped:
         print(f"WARNING: {skipped} row(s) had no id, skipped")
 
-    # jobspy has no "there were more, we stopped" signal of its own -- a
-    # result count that reached the requested budget is the same heuristic
-    # this project's other paginated collectors use (a full final page plus
-    # a cap being what stopped it, not the source running dry), applied
-    # here since this process never sees Indeed's raw response either
-    # (docs/audit PR-015).
-    truncated = len(jobs) >= results_wanted
-
-    body = {"source": "indeed", "postings": postings, "truncated": truncated}
+    body = {"source": "indeed", "postings": postings, "truncated": any_truncated}
     response = requests.post(
         f"{api_url}/runs/collect/external",
         json=body,
