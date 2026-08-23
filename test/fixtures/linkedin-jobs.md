@@ -45,3 +45,33 @@ named real companies (Bemobi Wave, SulAmérica, Núclea, BuscarVagas among
 them) — none of those appear anywhere in this repository's history, matching
 the same discipline `indeed-jobs.md` and `gupy-jobs.md` already follow
 (ADR-004).
+
+## Update, 2026-08-23 (docs/11-known-issues.md B15)
+
+This fixture's field names (`title`, `company`, `location`, `link`,
+lowercase) were never actually confirmed against a real request — the
+2026-08-16 capture above is explicitly a **screenshot** of the table, not a
+raw JSON body. Three real ingest runs (2026-08-18 through 2026-08-23, 33
+postings total) showed every single item being rejected by
+`LinkedinAlertJobSchema`. A real row the operator pasted 2026-08-23 — for
+the same "Núclea" / "Bemobi Wave" companies this fixture's own provenance
+already named as appearing in the real table — is best explained by the
+real JSON using **Title Case** keys (`Title`, `Company`, `Location`,
+`Link`, matching the already-documented `Subject`/`ReceivedAt`/
+`ExtractedAt` columns) rather than the lowercase names this fixture used.
+
+This fixture's own lowercase shape was **not changed** — `LinkedinAlertJobSchema`
+now lower-cases incoming keys before validation, so both shapes parse
+identically, and this fixture stays a valid, minimal "well-formed input"
+reference. The Title-Case shape itself is exercised directly in
+`linkedin-alert-normalizer.test.ts`'s "B15 — the real n8n row's shape"
+block, with the real posting's company name replaced by a fictional one per
+the same rule as the rest of this file — the structural facts (Title-Case
+keys, envelope shipped no usable `sourceId`, link ends in
+`/jobs/view/<digits>/`) are real, the company/title text is not.
+
+**Still not a confirmed raw-JSON capture** — the pasted evidence is a
+rendered row, not the HTTP Request node's literal body. See B15 for what
+would close this out for certain: the new content-free diagnostic metadata
+on the `normalization_rejected` event (`payloadKeys`, `hasSourceId`),
+readable straight from `posting_events` after the next real n8n delivery.

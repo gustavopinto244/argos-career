@@ -167,6 +167,66 @@ describe("normalizeLinkedinAlertJob", () => {
     expect(posting?.sourceUrl).toBeNull();
   });
 
+  describe("docs/11-known-issues.md B15 — the real n8n row's shape", () => {
+    it("parses Title-Case field names (Title/Company/Location/Link), not just lowercase", () => {
+      const posting = normalizeLinkedinAlertJob(
+        rawPosting({
+          Title: "Programa de Estágio | Dados, Produtos & IA",
+          Company: "Empresa Fictícia Núclea",
+          Location: "São Paulo, SP (Híbrido)",
+          Link: "https://www.linkedin.com/jobs/view/4451703964/",
+          Subject: 'Fwd: "estagio software vagas anunciadas…"',
+          ExtractedAt: "2026-08-16T18:36:00.019Z",
+        }),
+        NOW,
+      );
+      expect(posting).not.toBeNull();
+      expect(posting?.title).toBe("Programa de Estágio | Dados, Produtos & IA");
+      expect(posting?.company).toBe("Empresa Fictícia Núclea");
+      expect(posting?.location).toEqual({ kind: "known", city: "São Paulo" });
+      expect(posting?.workMode).toBe("hybrid");
+    });
+
+    it("derives sourceId from the link's /jobs/view/<id>/ path when the envelope's sourceId is empty", () => {
+      const posting = normalizeLinkedinAlertJob(
+        rawPosting(
+          {
+            title: "Estágio Backend",
+            company: "Empresa X",
+            link: "https://www.linkedin.com/jobs/view/4451703964/",
+          },
+          "",
+        ),
+        NOW,
+      );
+      expect(posting).not.toBeNull();
+      expect(posting?.sourceId).toBe("4451703964");
+    });
+
+    it("prefers a real envelope sourceId over deriving one from the link", () => {
+      const posting = normalizeLinkedinAlertJob(
+        rawPosting(
+          {
+            title: "Estágio Backend",
+            company: "Empresa X",
+            link: "https://www.linkedin.com/jobs/view/4451703964/",
+          },
+          "li-real-id",
+        ),
+        NOW,
+      );
+      expect(posting?.sourceId).toBe("li-real-id");
+    });
+
+    it("is null, not a thrown error, when both sourceId and link are absent", () => {
+      const posting = normalizeLinkedinAlertJob(
+        rawPosting({ title: "Estágio Backend", company: "Empresa X" }, ""),
+        NOW,
+      );
+      expect(posting).toBeNull();
+    });
+  });
+
   describe("against the curated real-shaped fixture", () => {
     it("normalizes every item in linkedin-jobs.json into a valid Posting", () => {
       const items = fixture();
