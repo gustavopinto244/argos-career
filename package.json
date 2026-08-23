@@ -19,6 +19,7 @@
     "fixture:gupy": "tsx scripts/fixture-gupy.ts",
     "fixture:ciee": "tsx scripts/fixture-ciee.ts",
     "fixture:solides": "tsx scripts/fixture-solides.ts",
+    "fixture:infojobs": "tsx scripts/fixture-infojobs.ts",
     "fixture:jooble": "tsx --env-file-if-exists=.env scripts/fixture-jooble.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",

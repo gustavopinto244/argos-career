@@ -1,6 +1,7 @@
 import { CollectorPort } from "../domain/ports/collector.port";
 import { CieeCollector } from "./ciee-collector";
 import { GupyCollector } from "./gupy-collector";
+import { InfoJobsCollector } from "./infojobs-collector";
 import { SolidesCollector } from "./solides-collector";
 
 /**
@@ -18,6 +19,7 @@ const COLLECTORS: ReadonlyMap<string, () => CollectorPort> = new Map([
   ["gupy", () => new GupyCollector() as CollectorPort],
   ["ciee", () => new CieeCollector() as CollectorPort],
   ["solides", () => new SolidesCollector() as CollectorPort],
+  ["infojobs", () => new InfoJobsCollector() as CollectorPort],
 ]);
 
 /**

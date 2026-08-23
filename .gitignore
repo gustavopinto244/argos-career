@@ -24,6 +24,7 @@ data/
 # Raw API captures. Recorded to pin down undocumented response schemas;
 # they may embed recruiter names and contact details.
 test/fixtures/*-raw.json
+test/fixtures/*-raw.html
 
 # Dependencies and build output
 node_modules/

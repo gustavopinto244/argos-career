@@ -1,0 +1,53 @@
+[
+  {
+    "id": "10000001",
+    "title": "Estagiário de TI",
+    "description": "Área e especialização profissional: Informática, TI, Telecomunicações - Informática<br>Nível hierárquico: Estagiário<br>Lugar de trabalho: Rio de Janeiro, RJ<br>Regime de contratação de tipo Estágio<br>Jornada Período Integral<br>Empresa Fictícia Alfa busca estagiário(a) de TI para dar suporte técnico e atuar em pequenas automações internas. Conhecimento em Python ou Shell Script é um diferencial.",
+    "datePosted": "2026-08-10T12:00:00.0000000",
+    "validThrough": "2026-11-10T12:00:00.0000000",
+    "jobUrl": "https://www.infojobs.com.br/vaga-de-estagiario-ti-em-rio-janeiro__10000001.aspx",
+    "hiringOrganization": {
+      "name": "Empresa Fictícia Alfa"
+    },
+    "jobLocation": {
+      "address": {
+        "addressLocality": "Rio de Janeiro",
+        "addressRegion": "RJ"
+      }
+    }
+  },
+  {
+    "id": "10000002",
+    "title": "Estágio em Suporte Técnico | Home Office",
+    "description": "Área e especialização profissional: Informática, TI, Telecomunicações - Suporte Técnico<br>Nível hierárquico: Estagiário<br>Regime de contratação de tipo Estágio<br>Jornada Período Integral<br>Empresa Fictícia Beta - modelo de trabalho: Híbrido (2x home office, 3x presencial).",
+    "datePosted": "2026-08-05T09:30:00.0000000",
+    "validThrough": "2026-11-05T09:30:00.0000000",
+    "jobUrl": "https://www.infojobs.com.br/vaga-de-estagio-suporte-tecnico-home-office__10000002.aspx",
+    "hiringOrganization": {
+      "name": "Empresa Fictícia Beta"
+    },
+    "jobLocation": {
+      "address": {
+        "addressLocality": "Niterói",
+        "addressRegion": "RJ"
+      }
+    }
+  },
+  {
+    "id": "10000003",
+    "title": "Estágio em Pedagogia - Instituição de Ensino",
+    "description": "Área e especialização profissional: Educação, Ensino, Idiomas - Ensino Particular<br>Nível hierárquico: Estagiário<br>Lugar de trabalho: Rio de Janeiro, RJ<br>Instituição fictícia selecionando estudantes de Pedagogia.",
+    "datePosted": "2026-08-21T15:46:00.0000000",
+    "validThrough": "2026-11-20T15:46:00.0000000",
+    "jobUrl": "https://www.infojobs.com.br/vaga-de-estagio-pedagogia__10000003.aspx",
+    "hiringOrganization": {
+      "name": "Instituição Fictícia de Ensino"
+    },
+    "jobLocation": {
+      "address": {
+        "addressLocality": "Rio de Janeiro",
+        "addressRegion": "RJ"
+      }
+    }
+  }
+]
