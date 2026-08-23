@@ -995,13 +995,52 @@ Revisit once the worksheet is closer to the full 50 `docs/04` calls for.
 > (mandatoryCoverage 50% → 75%).
 >
 > **B9 stays open, on a much narrower basis than before.** 50.00 is still
-> short of the hand label's 100, and the remaining distance is two already
-> named things, neither of them the extraction or the guard: the
-> work-availability requirement the model will not match despite the
-> evidence existing (the `workAvailability` note above), and
-> `trackAlignment` stuck at 40% because "Programa de Estágio Smarthis |
-> 2026" matches no track keyword — the B10 classifier-gap shape, on a title
-> that genuinely names no technology.
+> short of the hand label's 100. Both remaining causes were then run down —
+> see the two notes below.
+
+> **The work-availability half was a hard bug, not "model quality"
+> — 2026-08-22 (ADR-058).** The `workAvailability` note above concluded the
+> model simply was not using available evidence, "not a defect in this
+> change". Wrong. `evidence-catalog.ts` renders that field under a
+> `[Work availability]` tag, and `FIXED_TAG_TERMS` — the table
+> `isEvidenceApplicableToRequirement` resolves declared-field tags against —
+> **never got a matching entry**. The lookup fell through to a competency
+> search, found no competency by that name, and returned `false`. Measured
+> deterministically, no model involved: the line is `real=true
+applicable=false`, and was so for _every_ requirement that could ever
+> exist. The model's correct `met` was being coerced to `not_met` every
+> time; the field was structurally dead from the day it was added.
+>
+> Fixed by giving the tag its own work-mode vocabulary (not `Availability`'s
+> hours vocabulary — the two must not answer for each other). Verified with
+> a cold end-to-end run: the requirement moved `not_met` → `met` and
+> **`mandatoryCoverage` 75% → 100%**.
+
+> **The `trackAlignment` half is now precisely located, and is what still
+> caps this posting.** With coverage at 100%, Smarthis would score **79.4**
+> — but `unknownTrackCapScore` caps it to **50.00**, because
+> `classifyTrack` reads the **title only** and "Programa de Estágio
+> Smarthis | 2026" names no technology.
+>
+> The obvious fix — also classify on the description — was measured against
+> the real corpus and **rejected**: it would newly classify 438 postings,
+> almost all off-track ("Operador(a) de Caixa" as `dev`, "Assistente de
+> vendas" as `security`), because descriptions are full of HR boilerplate.
+> With `rejectUnknownTrack` on, each is a wasted Stage A/B call.
+>
+> **The signal that does work, measured on this posting:** classify on
+> Stage A's _extracted requirements_, which are boilerplate-free by
+> construction. `classifyTrack` over Smarthis's extracted requirement text
+> returns `["dev", "automation"]` where the title returns `[]` — giving
+> `trackAlignment` 1.0, no cap, and **88.4 → `apply`**, against a hand label
+> of 100.
+>
+> **Not implemented here, deliberately.** The pre-filter's track must stay
+> title-based — it gates spending and runs before any LLM call — so this
+> would split one classifier into two uses: a cheap title-based gate, and a
+> richer requirement-based signal for the _score_. That is a scoring-model
+> change (`docs/04`), and the M7 protocol requires it be calibrated as its
+> own single variable rather than bundled here.
 
 > **`workAvailability` profile field added, 2026-08-19.** Closes the
 > Smarthis work-mode gap above: `profile.ts` gained a fourth declared

@@ -91,7 +91,15 @@ function includesTerm(haystack: string, term: string): boolean {
   return normalized.length >= 2 && haystack.includes(` ${normalized} `);
 }
 
-const FIXED_TAG_TERMS: Readonly<Record<string, readonly string[]>> = {
+/**
+ * Exported for one reason (ADR-058): a test asserts every declared-field tag
+ * `buildEvidenceCatalog` emits has an entry here. Nothing links the two
+ * tables at the type level, and when `Work availability` was added to the
+ * catalog without a matching entry, that evidence line became silently
+ * unusable for every requirement — real, quoted, and rejected 100% of the
+ * time. The test is the cheap standing guard against the next one.
+ */
+export const FIXED_TAG_TERMS: Readonly<Record<string, readonly string[]>> = {
   "Academic enrollment": [
     "curso",
     "cursando",
@@ -109,6 +117,32 @@ const FIXED_TAG_TERMS: Readonly<Record<string, readonly string[]>> = {
     "carga horaria",
     "horario",
     "availability",
+  ],
+  // ADR-058. `workAvailability` was added to `Profile` and rendered into the
+  // catalog under its own tag, but this table never got a matching entry —
+  // so `isEvidenceApplicableToRequirement` fell through to the competency
+  // lookup, found no competency named "Work availability", and returned
+  // false for *every* requirement. The line was structurally unusable from
+  // the day it was added: real, quotable, and rejected 100% of the time.
+  //
+  // Work-MODE vocabulary only, deliberately not the generic
+  // "disponibilidade" that `Availability` above owns. That keeps the two
+  // apart: a weekly-hours requirement matches the hours line, a
+  // remote/hybrid requirement matches this one, and neither answers for the
+  // other.
+  "Work availability": [
+    "presencial",
+    "hibrido",
+    "remoto",
+    "remota",
+    "home office",
+    "teletrabalho",
+    "modelo de trabalho",
+    "local de trabalho",
+    "onsite",
+    "on site",
+    "hybrid",
+    "remote",
   ],
   Compensation: ["bolsa", "remuneracao", "salario", "stipend", "compensation"],
 };
