@@ -1734,3 +1734,46 @@ passthrough-only metadata.
 > table — has not happened yet. If it still fails, `payloadKeys` on the
 > next `normalization_rejected` event will say exactly why, closing the
 > loop this entry's own investigation had to do by hand.
+
+---
+
+## B17 — Sólides measured at zero real yield after two weeks; queries parked
+
+**Status:** parked (ADR-031 Amendment 1) · **Found:** 2026-08-23, deciding
+what to do about the source PR5's `report:supply` output made visible for
+the first time
+
+`npm run report:supply` against Atlas's live corpus showed what no earlier
+measurement had: two full weeks of Sólides collection, 10 postings total
+across both weeks, **0 on-track in either week** — the worst yield of any
+active source, well below even CIEE's low-but-nonzero rate.
+
+Measured further before deciding, the same discipline B14 already applied
+to Catho: probed five tech-specific terms (`estágio ti`, `estágio
+tecnologia`, `estágio desenvolvimento`, `estágio dados`, `estágio suporte`)
+against Sólides's live API with `city: Rio de Janeiro`, matching the
+production queries' own shape. Four returned nothing at all. The fifth
+(`estágio tecnologia`) returned exactly one real, on-track, Rio-area
+posting — "Estagiário de Banco de Dados | DBA | SQL Server | Híbrido |
+Barra Olímpica" — and its `createdAt` is **2026-01-13**, eight months
+before this measurement. Decisively too old under `maxAgeDays: 7` on any
+reading of that date, not a borderline case.
+
+A separate, broader probe with no city filter (`estágio ti`, nationwide)
+returned 20 real, on-track-titled postings (`tracks: ["automation"]` or
+similar) — proving Sólides's inventory itself is not empty of real tech
+roles — but every one was outside the Rio metro area (Itajaí, Salvador,
+Fortaleza, São Paulo, and 16 others), and 14 of 20 were independently
+`too_old` regardless of location. Confirms the earlier finding is not an
+artifact of one query: this source's Rio-area, fresh, on-track supply is
+genuinely at or near zero, not merely unmeasured before now.
+
+> **Parked, 2026-08-23 (ADR-031 Amendment 1).** The nine Sólides queries
+> in `config/criteria.yaml` (estágio/estagiário/estagiária ×
+> Rio/Niterói/São Gonçalo) are removed — not commented out — and
+> `alerts.sourceFreshnessHours.solides` removed alongside them, the same
+> "an unlisted source is simply not checked" reasoning `catho` already
+> uses. `SolidesCollector`, its schema, normalizer and both registry
+> entries are untouched: this is a query-budget decision, not a code
+> retirement, and re-adding the nine queries is the entire reversal cost.
+> Full measurement in ADR-031 Amendment 1.

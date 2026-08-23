@@ -134,54 +134,20 @@ collection:
     # reaches Stage A, so the paid work is unchanged -- and it gives M10's
     # market analysis a national picture instead of a Rio-shaped one.
     - source: ciee
-    # --- Sólides (discovery 2026-08-17, ADR-031) ---------------------------
-    # Public JSON API found by inspecting vagas.solides.com.br's own network
-    # requests -- the site is a Next.js SPA that embeds no job data in its
-    # HTML, so this endpoint is undocumented, same situation as Gupy's.
-    #
-    # `jobName` here becomes Sólides's `title` param and `city` becomes
-    # `locations` (SolidesCollector appends " - UF"); unlike Gupy this search
-    # appears NOT to match the query string literally -- `title=estagio`
-    # (no accent, no gender suffix) already returned "Estágio" and
-    # "ESTAGIÁRIO(A)" titles in the same result set during discovery. All
-    # three terms are still listed explicitly, one per city, matching Gupy's
-    # own pattern: that finding was observed on one sample, not measured with
-    # `npm run probe:terms` the way Gupy's term list was (ADR-018) -- trusting
-    # it silently for a term this search profile depends on would be exactly
-    # the un-measured guess ADR-018 exists to avoid.
-    - source: solides
-      jobName: estágio
-      city: Rio de Janeiro
-    - source: solides
-      jobName: estagiário
-      city: Rio de Janeiro
-    - source: solides
-      jobName: estagiária
-      city: Rio de Janeiro
-    - source: solides
-      jobName: estágio
-      city: Niterói
-    - source: solides
-      jobName: estagiário
-      city: Niterói
-    - source: solides
-      jobName: estagiária
-      city: Niterói
-    - source: solides
-      jobName: estágio
-      city: São Gonçalo
-    - source: solides
-      jobName: estagiário
-      city: São Gonçalo
-    - source: solides
-      jobName: estagiária
-      city: São Gonçalo
-    # No remote query: `title=estagio` with no `locations` filter returned
-    # 3,638 nationwide results (728 pages at Sólides's fixed take=10) during
-    # discovery -- filtering that down to the `homeOffice: true` subset would
-    # mean walking the whole thing to throw most of it away, the same
-    # low-signal-volume trade ADR-018 already rejected for Gupy's bare
-    # "estagio tecnologia"-style terms. Deferred, not forgotten.
+    # --- Sólides: parked, 2026-08-23 (ADR-031 Amendment 1) -----------------
+    # The nine queries this source used to run here (estágio/estagiário/
+    # estagiária x Rio/Niterói/São Gonçalo) are removed, not merely
+    # commented out -- measured at zero real yield across two full weeks in
+    # production (`npm run report:supply`) and confirmed, not assumed, with
+    # five tech-specific probe terms against the live API: the one real
+    # Rio-area, dev-track hit found ("Estagiário de Banco de Dados | DBA |
+    # SQL Server", Barra Olímpica) carries a `createdAt` of 2026-01-13 --
+    # eight months stale, failing `maxAgeDays` decisively regardless of
+    # interpretation. `SolidesCollector`/`solides-schema.ts`/
+    # `solides-normalizer.ts` and both registry entries are left in place,
+    # untouched -- this is a query-budget decision, not a code retirement,
+    # and re-adding queries here is the entire reversal cost. Full
+    # measurement and the revisit trigger: ADR-031 Amendment 1.
   # Pause between queries. The collector's own ~1.5s interval only spaces out
   # pages within one query (CLAUDE.md 6).
   queryIntervalMs: 1500
@@ -643,28 +609,28 @@ alerts:
   #
   # Windows are set from each source's real cadence with slack for one
   # missed cycle, not from wishes:
-  #   gupy/ciee/solides  pulled every 4h by the scheduler (ADR-009), but
-  #                      volume is lumpy -- solides legitimately went ~2
-  #                      days without a new posting while healthy -- so 72h
-  #                      flags a dead collector without crying over a quiet
-  #                      weekend.
-  #   indeed             its own systemd timer runs twice daily; 36h is a
-  #                      little over one missed run.
-  #   linkedin           the n8n workflow's own schedule (ADR-029) is the
-  #                      user's infrastructure, not this repository's --
-  #                      no fixed cadence to measure against. The three
-  #                      real ingest runs observed 2026-08-18 through
-  #                      2026-08-23 were 72h and 46h apart, not daily
-  #                      (job-alert volume is itself irregular). 96h gives
-  #                      slack over the worst gap actually seen rather than
-  #                      an assumed schedule.
+  #   gupy/ciee  pulled every 4h by the scheduler (ADR-009), but volume is
+  #              lumpy, so 72h flags a dead collector without crying over a
+  #              quiet weekend.
+  #   indeed     its own systemd timer runs twice daily; 36h is a little
+  #              over one missed run.
+  #   linkedin   the n8n workflow's own schedule (ADR-029) is the user's
+  #              infrastructure, not this repository's -- no fixed cadence
+  #              to measure against. The three real ingest runs observed
+  #              2026-08-18 through 2026-08-23 were 72h and 46h apart, not
+  #              daily (job-alert volume is itself irregular). 96h gives
+  #              slack over the worst gap actually seen rather than an
+  #              assumed schedule.
   #
   # `catho` is deliberately absent: it has never been deployed (B14), and
   # listing it would alert every cycle about a decision nobody has made yet.
-  # An unlisted source is simply not checked.
+  # `solides` was here (72h) until 2026-08-23: its nine queries are parked
+  # (ADR-031 Amendment 1, see `collection.queries` above), so it no longer
+  # runs and listing it would alert about a decision already made, the same
+  # reasoning that keeps `catho` off this list. An unlisted source is
+  # simply not checked.
   sourceFreshnessHours:
     gupy: 72
     ciee: 72
-    solides: 72
     indeed: 36
     linkedin: 96

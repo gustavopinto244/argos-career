@@ -133,3 +133,69 @@ not deferred silently.
 scheduler — wired and unit-tested against a curated fixture, matching the
 honest status this project already uses for a just-landed source before its
 first real collection cycle.
+
+## Amendment 1 — 2026-08-23: queries parked, measured at zero real yield
+
+The "not yet run against the real live scheduler" caveat this ADR closed
+with has since been answered, and the answer is worse than the "Hard"
+section's real-endpoint-can-change risk: Sólides ran for two full weeks in
+production and delivered nothing usable. `npm run report:supply`
+(docs/08-observability.md) — built specifically to answer "is this source
+worth it" for every collector, not only Sólides — showed 10 postings
+collected across both weeks and **zero** on-track in either one, the worst
+yield of any active source.
+
+**Measured further before parking anything**, the same discipline B14
+applied to Catho before parking that source: probed five tech-specific
+terms (`estágio ti`, `estágio tecnologia`, `estágio desenvolvimento`,
+`estágio dados`, `estágio suporte`) against the live API with `city: Rio
+de Janeiro`, the same shape the nine production queries already use. Four
+returned nothing. The fifth returned exactly one real, on-track, Rio-area
+posting — a database/SQL Server internship — whose `createdAt` is
+2026-01-13, eight months before the measurement. Decisively too old under
+`maxAgeDays: 7`, not a borderline case.
+
+A second probe, `estágio ti` with no city filter, confirmed this is not an
+artifact of the Rio constraint specifically: it returned 20 real,
+on-track-titled postings nationwide, proving Sólides's inventory genuinely
+contains tech roles — but every one was outside the Rio metro area, and 14
+of 20 were independently too old regardless of location. Two independent
+axes (geography, freshness) both cut the same near-zero result; this is a
+property of what Sólides actually has to offer this profile today, not a
+gap in how it was queried.
+
+### Decision
+
+The nine queries in `config/criteria.yaml`'s `collection.queries` are
+**removed**, not commented out, and `alerts.sourceFreshnessHours.solides`
+is removed alongside them — the same "an unlisted source is simply not
+checked" reasoning `catho` already uses, since an active freshness alert
+for a source with no active queries would alert about a decision already
+made.
+
+`SolidesCollector`, `solides-schema.ts`, `solides-normalizer.ts`, and both
+registry entries (`collector-registry.ts`, `normalizer-registry.ts`) are
+**untouched**. This is a query-budget decision — the collector still runs
+correctly, the endpoint still works, nothing here says the discovery
+session that found it was wasted — not a code retirement. Re-adding the
+nine queries (or new ones, measured first) is the entire reversal cost.
+
+### Consequences
+
+**Easy:** one config edit; every test that exercises `SolidesCollector`
+directly (fixture-based, no live network call — `docs/07`) is unaffected,
+since the collector itself did not change.
+
+**What this closes:** the original ADR's own "Left honestly open" item —
+the Gupy/Sólides company-overlap question — is now moot rather than
+answered; there is no ongoing Sólides collection left to check overlap
+against.
+
+**Revisit trigger, recorded rather than left vague:** Sólides publishes a
+`homeOffice`/remote axis this ADR's original queries never used (deferred,
+not forgotten, in the removed comment block) and its own inventory clearly
+contains real tech postings nationwide — if a future measurement of the
+remote axis, or a expansion of the target metro area, shows real on-track
+supply, re-adding queries is cheap. Until then, the measured cost (nine
+requests' worth of politeness delay every collection cycle, ADR-009) buys
+nothing.
