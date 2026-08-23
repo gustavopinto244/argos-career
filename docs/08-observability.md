@@ -193,6 +193,36 @@ principle 2 anyway.
 M9 adds an HTTP health endpoint reporting last successful run per kind, which is
 what an external check — including Hermes — can poll.
 
+### `npm run report:supply` — the metric that decides whether a source is worth it
+
+Every source this project added (Gupy, CIEE, Sólides, Indeed, LinkedIn) was
+decided on a one-off probe or raw volume; none had an ongoing number
+answering "is it still worth the request and maintenance budget." That gap
+is exactly what let Indeed go silent for six days before anyone noticed
+(`docs/11-known-issues.md` B13) and let Catho accumulate four ADRs before
+anyone measured that it delivers nothing (B14) — both found by a one-off
+audit, not a number anyone was already watching.
+
+**"Postings collected" is the wrong number to watch — it rewards volume a
+source cannot use.** CIEE alone supplies 87% of the corpus by raw count and
+a small single-digit fraction of it ever reaches `apply`; a source doubling
+its collected count while its on-track rate halves would look like progress
+on that metric and be a regression in practice. The number this project
+actually needs is **on-track, in-region postings per source per week** —
+what a source contributes to the outcome CLAUDE.md §1 cares about (cutting
+triage time), not to the database's row count.
+
+`report:supply` re-runs the real `applyPreFilter`/`classifyTrack` functions
+against every active posting, bucketed by source and by the ISO week it was
+first seen, evaluated with today's criteria — deliberately not a replay of
+each posting's own historical pre-filter decision, which would mix outcomes
+across however many criteria versions have shipped since. Delivered counts
+come from the real `posting_events` history instead, since that decision is
+recorded once, permanently, and does not need re-computing. Read-only,
+never alerts, never blocks a run — a report for periodic human review, the
+complement to `sourceFreshnessHours`'s automated silence check, not a
+replacement for it.
+
 ## What is deliberately not done
 
 - **Distributed tracing.** One process, sequential stages. `runId` in every log
