@@ -94,7 +94,17 @@ export function createMatch(
   };
 }
 
-export type Track = "dev" | "security" | "automation" | "unknown";
+/**
+ * `data` (ADR-061, docs/11-known-issues.md B9's supply-side follow-up):
+ * data-analyst/data-engineering-flavored postings, weighted below `dev`/
+ * `security` on purpose — CLAUDE.md §1's search profile names back-end and
+ * security as equal priority 1 and infrastructure/automation as priority
+ * 2, with no data-analysis track at all. `trackWeights.data` sits at
+ * `automation`'s 0.7, not `dev`'s 1.0, so a genuine data-analyst posting is
+ * still visible in the digest without competing on equal footing with the
+ * profile's actual first-priority targets.
+ */
+export type Track = "dev" | "security" | "automation" | "data" | "unknown";
 
 export type Verdict = "apply" | "review" | "discard";
 
@@ -113,6 +123,7 @@ export interface TrackWeights {
   readonly dev: number;
   readonly security: number;
   readonly automation: number;
+  readonly data: number;
   readonly unknown: number;
 }
 

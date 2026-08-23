@@ -282,8 +282,9 @@ export const CriteriaSchema = z.object({
       dev: z.array(z.string().min(1)).default([]),
       security: z.array(z.string().min(1)).default([]),
       automation: z.array(z.string().min(1)).default([]),
+      data: z.array(z.string().min(1)).default([]),
     })
-    .default({ dev: [], security: [], automation: [] }),
+    .default({ dev: [], security: [], automation: [], data: [] }),
   /**
    * Reject a posting pre-LLM when `classifyTrack` matches none of `tracks`
    * (ADR-051). Defaulted `false` so a criteria file predating this stays
@@ -313,6 +314,7 @@ export const CriteriaSchema = z.object({
     dev: z.number().min(0).max(1),
     security: z.number().min(0).max(1),
     automation: z.number().min(0).max(1),
+    data: z.number().min(0).max(1),
     unknown: z.number().min(0).max(1),
   }),
   scoring: ScoringConfigSchema,

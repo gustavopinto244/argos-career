@@ -16,7 +16,7 @@ three different words that all get casually called "job".
 | **Source**                    | A place postings come from: Gupy, Google Jobs, Indeed, LinkedIn                              | _Collector_, which is the adapter that talks to a source                      |
 | **Collector**                 | The adapter implementing `CollectorPort` for one source                                      | _Scraper_ — a word this project avoids, since scraping at scale is a non-goal |
 | **Fingerprint**               | `sha256` of normalized company + title + city; the deduplication key                         | Internal database id, and `sourceId`                                          |
-| **Track**                     | A career direction: `dev`, `security`, `automation`                                          | _Category_, which groups requirements within one posting                      |
+| **Track**                     | A career direction: `dev`, `security`, `automation`, `data` (ADR-061)                        | _Category_, which groups requirements within one posting                      |
 | **Category**                  | A grouping of requirements inside one posting, e.g. `language`, `education`                  | _Track_                                                                       |
 | **Requirement**               | One thing a posting declares it wants, with a `weight`                                       | _Criterion_, which is a pre-filter rule                                       |
 | **Weight** (of a requirement) | `blocking`, `mandatory` or `desirable`                                                       | The numeric weights in the score formula                                      |

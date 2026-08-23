@@ -399,6 +399,31 @@ tracks:
     # matched via that entry. 1 match, on-track (HMH -- "IT Support Intern"),
     # measured against the full corpus with zero false positives.
     - it
+  # Added 2026-08-23 (ADR-061), a lower-priority track of its own rather
+  # than folded into `dev` -- CLAUDE.md §1's search profile names only
+  # back-end, security and infrastructure/automation, not data analysis, so
+  # `trackWeights.data` sits at `automation`'s 0.7, not `dev`'s 1.0.
+  #
+  # Every phrase here was measured against the real production corpus
+  # (`docker exec` read-only query, same method B10/B13 use), whole-word,
+  # on-track, false-positive-checked -- bare "dados" was deliberately
+  # rejected, the same call B10 already made for the `dev` track and for
+  # the same reason: 2 of 11 real matches were off-track ("Estagiário
+  # Administrativo (Dados)", "Pessoa Estagiária de Dados Para Suporte e
+  # Atendimento ao Cliente" -- a customer-support role, not a data role).
+  # None of the five phrases below match either false positive.
+  data:
+    - análise de dados
+    - data analytics
+    - pessoa estagiária de dados
+    - governança de dados
+    - inteligência de dados
+    # Measured and deliberately NOT added: "engenheiro(a) de dados" -- a
+    # real, valuable title pattern seen live against Gupy's API (Visagio's
+    # RJ/SP/NE postings), but zero occurrences in the *stored* corpus this
+    # classifier actually runs against (none of the current collection
+    # queries happen to have pulled it in yet) -- nothing to measure a
+    # false-positive rate against. Revisit once one is actually collected.
 
 # Phrases that veto a track even when one of its keywords matched (ADR-015).
 # Every entry below was observed as a real false positive in the collected
@@ -452,6 +477,13 @@ trackExclusions:
     - segurança predial
     - técnico de segurança
     - segurança alimentar
+  data:
+    # "PESSOA ESTAGIÁRIA DE DADOS PARA SUPORTE E ATENDIMENTO AO CLIENTE"
+    # (2026-08-23, Quality Digital): a customer-support role, matched by
+    # "pessoa estagiária de dados" above only because that phrase happens
+    # to be this posting's own opening words -- the real job is support,
+    # not data.
+    - suporte e atendimento ao cliente
 
 # Reject a posting pre-LLM when its title matches none of the tracks above
 # (ADR-051). Measured on the 2026-08-17 calibration run: of the 28 postings
@@ -465,10 +497,13 @@ rejectUnknownTrack: true
 
 # Provisional until M7 calibration (docs/04-scoring-model.md). dev and
 # security share 1.0 — equal first priorities (docs/01-vision-and-scope.md).
+# data (ADR-061) shares automation's 0.7 -- a real, visible track, but not
+# one of CLAUDE.md §1's priority-1 targets.
 trackWeights:
   dev: 1.0
   security: 1.0
   automation: 0.7
+  data: 0.7
   unknown: 0.4
 
 # Stage C's formula (docs/04-scoring-model.md). Provisional until M7

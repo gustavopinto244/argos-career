@@ -71,6 +71,7 @@ revisited on its merits instead of re-argued from memory.
 | [058](adr/058-work-availability-evidence-vocabulary.md)                       | Give `Work availability` evidence its own requirement vocabulary                    | Accepted   | 2026-08-22 |
 | [059](adr/059-score-track-from-extracted-requirements.md)                     | Derive the score's track from extracted requirements                                | Accepted   | 2026-08-22 |
 | [060](adr/060-indeed-multi-term-search.md)                                    | Multiple search terms per Indeed collection run                                     | Accepted   | 2026-08-23 |
+| [061](adr/061-data-track.md)                                                  | A `data` track, weighted below `dev`/`security`                                     | Accepted   | 2026-08-23 |
 
 ## When an ADR is required
 

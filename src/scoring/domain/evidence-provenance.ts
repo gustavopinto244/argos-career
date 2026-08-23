@@ -180,6 +180,12 @@ const GENERIC_SKILL_TERMS: Readonly<Record<ProfileTrack, readonly string[]>> = {
   ],
   security: ["seguranca da informacao", "information security"],
   automation: [],
+  // Empty like `automation`, not guessed (ADR-061): no `profile.yaml`
+  // competency is tagged `data` yet (`ProfileTrackSchema`'s own comment),
+  // so there is nothing this guard could widen evidence admission for.
+  // Revisit if a real data-track competency and a real false-negative
+  // match this guard's `dev`/`security` entries were both measured for.
+  data: [],
 };
 
 /**

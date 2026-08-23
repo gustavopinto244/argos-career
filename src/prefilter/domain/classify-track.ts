@@ -55,6 +55,7 @@ export function classifyTrack(
     dev: [],
     security: [],
     automation: [],
+    data: [],
   },
 ): Track[] {
   const matches = (keyword: string) => keywordMatchesText(title, keyword);

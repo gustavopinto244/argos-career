@@ -117,8 +117,9 @@ score worse than one that lists them and has them met.
 
 This term answers "is this the _kind_ of job I am looking for?", which is
 separate from "do I meet its requirements?". A posting can match every stated
-requirement and still be the wrong track — a data-analysis internship whose
-requirements happen to be SQL and Python is a good match and a bad target.
+requirement and still be the wrong track — an HR "people analytics" internship
+whose requirements happen to be Excel and SQL is a good match and a bad
+target.
 
 **The posting's track is classified deterministically in the pre-filter**, by
 keyword against a configured table, before any LLM call. Stage C then reads a
@@ -135,12 +136,24 @@ trackWeights:
   dev: 1.0 # priority 1
   security: 1.0 # priority 1, equal to dev
   automation: 0.7 # priority 2
+  data: 0.7 # priority 2, same weight as automation (ADR-061)
   unknown: 0.4
 ```
 
 `dev` and `security` share the weight `1.0` because they are equal first
 priorities (`01-vision-and-scope.md`). Equal priority is expressed here, in
 configuration, rather than as a branch in the formula.
+
+**`data` (ADR-061) is not a priority-1 track.** CLAUDE.md §1's search
+profile names only back-end development, information security and
+infrastructure/automation — data-analyst/data-engineering postings are not
+one of the profile's own targets. `trackWeights.data` sits at `automation`'s
+0.7 rather than being folded into `dev`'s 1.0 (the alternative this project
+already uses for a few narrow, high-precision data-adjacent phrases — see
+`docs/06-glossary.md`): a genuinely on-track data posting stays visible in
+the digest without competing on equal footing with the profile's actual
+first-priority targets, the same reasoning `automation` already applies one
+tier below `dev`/`security`.
 
 `unknown: 0.4` is deliberately non-zero. A posting the classifier cannot place
 is a classifier gap, not a bad posting, and zeroing this term's contribution

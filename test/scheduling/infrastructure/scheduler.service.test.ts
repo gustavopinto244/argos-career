@@ -49,8 +49,8 @@ describe("SchedulerService — real DI wiring", () => {
       `
 titleRequired: [estágio]
 location: { allowRemote: true }
-tracks: { dev: [backend], security: [], automation: [] }
-trackWeights: { dev: 1.0, security: 1.0, automation: 0.7, unknown: 0.4 }
+tracks: { dev: [backend], security: [], automation: [], data: [] }
+trackWeights: { dev: 1.0, security: 1.0, automation: 0.7, data: 0.7, unknown: 0.4 }
 scoring:
   weights: { mandatory: 65, desirable: 20, trackAlignment: 15 }
   thresholds: { apply: 70, review: 45 }

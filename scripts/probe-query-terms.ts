@@ -69,7 +69,8 @@ async function main(): Promise<void> {
     );
     const onTrack = passes.filter((p) =>
       classifyTrack(p.title, criteria.tracks, criteria.trackExclusions).some(
-        (t) => t === "dev" || t === "security" || t === "automation",
+        (t) =>
+          t === "dev" || t === "security" || t === "automation" || t === "data",
       ),
     );
 
