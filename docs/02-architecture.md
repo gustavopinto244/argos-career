@@ -186,12 +186,12 @@ Reasoning and thresholds: ADR-010 and its amendments.
 business they are.** Worth reasoning about before building cross-source dedup
 for a pair that will never need it.
 
-| Kind                            | How a posting gets there                                                                                             | Overlap with other kinds                                                                                                                                                                                      |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **ATS** (Gupy, Sólides)         | The employer publishes on its own careers page, which the ATS powers                                                 | Low — the posting lives at the employer                                                                                                                                                                       |
-| **Agency** (CIEE)               | The employer delegates hiring; candidates apply _through_ the agency                                                 | Low — a vacancy takes one route or the other, not both                                                                                                                                                        |
-| **Aggregator** (Jooble, Adzuna) | Scraped or fed from other boards, including the two above                                                            | **High by construction** — its whole product is republishing                                                                                                                                                  |
-| **Job board** (Catho)           | The employer posts directly to Catho's own audience, not syndicated from elsewhere and not the employer's own domain | **Unmeasured, plausibly non-zero** — a company might run its own Gupy/Sólides careers page and separately pay to cross-post the same role on a job board for more reach, unlike the ATS-vs-agency split above |
+| Kind                            | How a posting gets there                                                                                                 | Overlap with other kinds                                                                                                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ATS** (Gupy, Sólides)         | The employer publishes on its own careers page, which the ATS powers                                                     | Low — the posting lives at the employer                                                                                                                                                                       |
+| **Agency** (CIEE)               | The employer delegates hiring; candidates apply _through_ the agency                                                     | Low — a vacancy takes one route or the other, not both                                                                                                                                                        |
+| **Aggregator** (Jooble, Adzuna) | Scraped or fed from other boards, including the two above                                                                | **High by construction** — its whole product is republishing                                                                                                                                                  |
+| **Job board** (Catho, InfoJobs) | The employer posts directly to the board's own audience, not syndicated from elsewhere and not the employer's own domain | **Unmeasured, plausibly non-zero** — a company might run its own Gupy/Sólides careers page and separately pay to cross-post the same role on a job board for more reach, unlike the ATS-vs-agency split above |
 
 Measured on the real corpus, 2026-08-16, with 386 distinct Gupy employers and
 1,552 distinct CIEE employers: **zero** companies in common. The only name
@@ -215,6 +215,19 @@ the opposite was assumed for a while, and because it decides real work:
 - **Any aggregator:** cross-source dedup becomes necessary the moment one is
   added, because republishing is what an aggregator _is_. Build it then, with
   real pairs to verify against.
+- **InfoJobs (added 2026-08-23, ADR-063):** a job board, same unmeasured-but-
+  plausible-overlap category as Catho — not built as a Gupy/CIEE-style
+  ATS/agency pair, so the "solves a problem that does not exist" conclusion
+  above does not automatically carry over. The **exact**-fingerprint dedup
+  (`sha256(company + title + city)`) already catches an identical posting
+  cross-posted verbatim, for every source pair, with no new code — what
+  would still need building is the **fuzzy** (layer 2, Dice-similarity)
+  check running cross-source rather than only within one source's own
+  company group. Deferred, not built speculatively: no real InfoJobs corpus
+  exists yet to measure real overlap against, and the Jooble precedent (B4)
+  is the concrete warning against building a dedup layer before there is
+  data to verify it works. Re-measure the way the Gupy/CIEE table above was,
+  once InfoJobs has run for real.
 
 **A warning for whoever measures this next.** The first attempt at matching
 company names across sources produced 88 "similar" pairs, every one of them
@@ -575,6 +588,58 @@ captured live per run by a real browser, not a static API response a
 `fixture:*` script can snapshot; the schema and normalizer were instead
 fitted directly against real pages inspected manually during discovery
 (2 samples), recorded in ADR-032.
+
+## Verified: the InfoJobs response shape (ADR-063)
+
+No JSON API found — `infojobs.com.br`'s listing pages are server-rendered
+HTML with no embedded JSON at all. The **detail** page for each posting is
+different: it carries a clean `application/ld+json` `schema.org/JobPosting`
+block, a real JSON parse rather than a scrape, captured with
+`npm run fixture:infojobs` on 2026-08-23.
+
+```
+GET https://www.infojobs.com.br/vagas-de-emprego-{termo}-{local}.aspx
+  -> server-rendered HTML, one <div id="vacancyNNNN" data-id="NNNN"
+     data-href="/vaga-de-...__NNNN.aspx"> per result, no description,
+     no structured location -- id and the detail link only.
+
+GET https://www.infojobs.com.br{detail-href}
+  -> <script type="application/ld+json">{ JobPosting }</script>, carrying
+     title, description (real prose with literal <br> line breaks),
+     datePosted, hiringOrganization.name, jobLocation.address
+     (addressLocality/addressRegion, structured), baseSalary, validThrough.
+     No `id` field in this block at all -- the listing card's own
+     `data-id` is what this project uses as sourceId.
+```
+
+**The location filter is a friendly-URL suffix, not a query parameter** —
+`vagas-de-emprego-{termo}-{cidade-slug}.aspx`, or `-trabalho-home-
+office.aspx` for remote. Found by reading the real facet links' own
+`data-url` attributes, not guessed: the legacy `?palabra=&provincia=`-style
+query-string form was tried first and verified to silently return the
+unfiltered nationwide set regardless of the `provincia` value given.
+
+**No working pagination was found.** Every guessed parameter (`Pagina`,
+`pagina`, `page`, `Page`, both cased and querystring-appended) returned the
+listing's own first-page content again, not a second page — accepted as a
+documented gap (ADR-063), not solved by guessing further; `InfoJobsCollector`
+is single-page-per-query as a result.
+
+**`workMode` has no structural signal.** InfoJobs's `JobPosting` states
+only a physical address, never a remote/hybrid/onsite field the way Gupy's
+`workplaceType` or Indeed's `is_remote` do — a posting mentioning "Home
+Office" in its own title or free-text description is not read as evidence
+of anything structural (CLAUDE.md §15); `InfoJobsNormalizer` maps every
+posting to `workMode: "unknown"`.
+
+Full schema: `src/posting/infrastructure/infojobs-schema.ts`. Provenance for
+the curated, committed sample: `test/fixtures/infojobs-jobs.md`.
+
+**`robots.txt` checked on `infojobs.com.br` — allows every path this
+collector queries.** Only account-area and legacy static-asset paths are
+disallowed (`/static/Avisolegal.aspx` and similar); both the listing
+(`/vagas-de-emprego-*.aspx`) and detail (`/vaga-de-*.aspx`) URL shapes this
+collector uses are unrestricted.
 
 ## Unverified assumptions
 

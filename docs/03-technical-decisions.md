@@ -73,6 +73,7 @@ revisited on its merits instead of re-argued from memory.
 | [060](adr/060-indeed-multi-term-search.md)                                    | Multiple search terms per Indeed collection run                                     | Accepted   | 2026-08-23 |
 | [061](adr/061-data-track.md)                                                  | A `data` track, weighted below `dev`/`security`                                     | Accepted   | 2026-08-23 |
 | [062](adr/062-gupy-vacancy-type-filter.md)                                    | Filter Gupy queries by `vacancy_type_internship`                                    | Accepted   | 2026-08-23 |
+| [063](adr/063-infojobs-collector.md)                                          | Add InfoJobs as a source, via listing scrape + detail JSON-LD                       | Accepted   | 2026-08-23 |
 
 ## When an ADR is required
 

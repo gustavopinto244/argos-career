@@ -134,6 +134,49 @@ collection:
     # reaches Stage A, so the paid work is unchanged -- and it gives M10's
     # market analysis a national picture instead of a Rio-shaped one.
     - source: ciee
+    # --- InfoJobs (discovery 2026-08-23, ADR-063) ---------------------------
+    # Server-rendered HTML, no JSON API found. Location is a friendly-URL
+    # suffix (`vagas-de-emprego-{termo}-{cidade}.aspx` or `-trabalho-home-
+    # office.aspx` for remote), found by reading the real facet links'
+    # `data-url` attributes -- the legacy `?provincia=`-style query param
+    # silently returns the unfiltered nationwide set.
+    #
+    # Both `estagio` and `estagiario` are listed, same reason Gupy's own
+    # queries list every gender/inflection: InfoJobs matches close to
+    # literally, and each term returned a different, only partly
+    # overlapping result set when measured. `estagiaria ti` was also tried
+    # and returned the exact same 4 postings `estagio ti` already covers --
+    # not added, redundant.
+    #
+    # Measured live before adding, same discipline every other source's
+    # query list uses: bare tech words with no "estagio"/"estagiario"
+    # prefix ("ti", "dados", "tecnologia", "desenvolvimento", "programador")
+    # returned ordinary (non-internship) job postings -- InfoJobs's search
+    # does not implicitly restrict to internships the way `titleRequired`
+    # does downstream, so the query itself has to ask for one. Prefixed
+    # multi-word terms fared little better: "estagio desenvolvimento",
+    # "estagio dados" and "estagio seguranca da informacao" all returned
+    # the same generic, mostly off-track set as a bare "estagio" search --
+    # only "ti" reliably narrows the result set (4-20 real, on-track-titled
+    # hits per query, sampled). Revisit if InfoJobs's own search behavior
+    # changes.
+    - source: infojobs
+      jobName: estagio ti
+      city: Rio de Janeiro
+    - source: infojobs
+      jobName: estagiario ti
+      city: Rio de Janeiro
+    - source: infojobs
+      jobName: estagio ti
+      isRemoteWork: true
+    - source: infojobs
+      jobName: estagiario ti
+      isRemoteWork: true
+    # Niterói/São Gonçalo not yet measured for this source -- cheap to add
+    # (a city-slug change only) once probed with the same discipline as
+    # Rio de Janeiro above. Not an oversight; deferred pending a real
+    # measurement, matching Gupy's own "the remaining cities... measured
+    # deliberately, not an oversight" precedent.
     # --- Sólides: parked, 2026-08-23 (ADR-031 Amendment 1) -----------------
     # The nine queries this source used to run here (estágio/estagiário/
     # estagiária x Rio/Niterói/São Gonçalo) are removed, not merely
@@ -609,9 +652,9 @@ alerts:
   #
   # Windows are set from each source's real cadence with slack for one
   # missed cycle, not from wishes:
-  #   gupy/ciee  pulled every 4h by the scheduler (ADR-009), but volume is
-  #              lumpy, so 72h flags a dead collector without crying over a
-  #              quiet weekend.
+  #   gupy/ciee/infojobs  pulled every 4h by the scheduler (ADR-009), but
+  #              volume is lumpy, so 72h flags a dead collector without
+  #              crying over a quiet weekend.
   #   indeed     its own systemd timer runs twice daily; 36h is a little
   #              over one missed run.
   #   linkedin   the n8n workflow's own schedule (ADR-029) is the user's
@@ -632,5 +675,6 @@ alerts:
   sourceFreshnessHours:
     gupy: 72
     ciee: 72
+    infojobs: 72
     indeed: 36
     linkedin: 96

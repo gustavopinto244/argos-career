@@ -473,6 +473,28 @@ One per pull request, each meeting the M3 criteria:
       regardless of the block (ADR-033, `collectors/catho/state.ts`, 27
       tests), since they're correct to have whenever this collector does
       get unblocked
+- [x] InfoJobs, via listing scrape + detail-page `application/ld+json`
+      (ADR-063; `infojobs-schema.ts`, `infojobs-listing-parser.ts`,
+      `infojobs-normalizer.ts`, `infojobs-collector.ts`). No JSON API found
+      — the listing page is server-rendered HTML with no embedded job data
+      (a scoped regex reads each result card's `data-id`/`data-href`, not a
+      new HTML-parser dependency), but each detail page carries a clean,
+      structured `schema.org/JobPosting` block. Location filtering is a
+      friendly-URL suffix, found by reading the site's own facet links, not
+      the legacy `?provincia=` query param (silently unfiltered). Meets
+      every M3 criterion: `npm run fixture:infojobs` against the real site,
+      tolerant Zod schema, curated fixture with provenance
+      (`infojobs-jobs.md`), contract tests including one that caught a real
+      bug before shipping (one failing detail page was aborting an entire
+      collection cycle instead of being skipped per item), `robots.txt`
+      checked (open for every path this collector queries), honest
+      User-Agent, paced requests, backoff, explicit timeout. Registered in
+      both `collector-registry.ts` and `normalizer-registry.ts`; four
+      queries added to `config/criteria.yaml` (`estagio ti`/`estagiario ti`
+      × Rio de Janeiro/remote, each measured live before being added).
+      **Not yet run for real** — wired and unit-tested against a curated
+      fixture, same honest status this project records for every source
+      before its own first live collection cycle
 - [ ] `N8nCollector` behind `CollectorPort`, with one long-tail source proving
       it (ADR-008). Workflow exported and committed to `n8n/`; core verified
       unaffected with n8n stopped
