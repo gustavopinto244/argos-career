@@ -986,12 +986,22 @@ Revisit once the worksheet is closer to the full 50 `docs/04` calls for.
 > rejected, the model having quoted the academic-enrollment line, which the
 > guard is right to refuse.
 >
-> **Deliberately not claimed: Smarthis's end-to-end score.** The calibration
-> harness would not exercise a cold Stage B call for this posting no matter
-> how many times its cached rows were deleted (**B12**), so the honest
-> status is that the guard is fixed and verified at unit and call level,
-> while the pipeline number behind it is still unverified. B9 stays open on
-> that basis alone — not because a cause is unknown.
+> **Confirmed end to end, same session, once B12 was understood.** The
+> reason a cold run seemed impossible was a second cache (`partial_matches`,
+> read before `matches`) replaying stored answers — see B12. Clearing both
+> via the new `npm run score:one -- <fp> --cold`: **13 real model calls, 10
+> providers, 24.5 s, $0.0026**, and the requirement moved `not_met` →
+> `met`, taking Smarthis from **43.83 `discard` to 50.00 `review`**
+> (mandatoryCoverage 50% → 75%).
+>
+> **B9 stays open, on a much narrower basis than before.** 50.00 is still
+> short of the hand label's 100, and the remaining distance is two already
+> named things, neither of them the extraction or the guard: the
+> work-availability requirement the model will not match despite the
+> evidence existing (the `workAvailability` note above), and
+> `trackAlignment` stuck at 40% because "Programa de Estágio Smarthis |
+> 2026" matches no track keyword — the B10 classifier-gap shape, on a title
+> that genuinely names no technology.
 
 > **`workAvailability` profile field added, 2026-08-19.** Closes the
 > Smarthis work-mode gap above: `profile.ts` gained a fourth declared
@@ -1235,37 +1245,60 @@ with the flag set, identical to without it.
 
 ---
 
-## B12 — `run-calibration.ts` reports zero model calls yet writes fresh match rows
+## B12 — Stage B has two caches, and clearing the obvious one is not a cold run
 
-**Status:** open · **Found:** 2026-08-22, trying to verify ADR-057 end to end
+**Status:** fixed (diagnosis corrected, tooling added) · **Found:**
+2026-08-22, trying to verify ADR-057 end to end
 
-Attempting to confirm ADR-057's fix on the real Smarthis posting, its cached
-`matches` rows were deleted (they are a cache by construction, ADR-007) and
-`npm run calibration:run` re-run. Every time, the run:
+Attempting to confirm ADR-057 on the real Smarthis posting, its cached
+`matches` row was deleted and the posting re-scored. Every attempt produced
+the same impossible-looking trio: `Model calls: 0`, `stageBCacheHit: false`,
+and a **freshly written `matches` row** still containing the old
+`not_met` / `evidence: null`.
 
-- printed `Model calls: 0 | prompt tokens: 0 | completion tokens: 0`,
-- emitted **zero** `stage-b:` log lines for that fingerprint,
-- and yet **wrote a fresh `matches` row** with a current timestamp,
-  containing `not_met` / `evidence: null` for the requirement under test.
+> **This entry originally blamed the calibration harness — that was wrong,
+> and the correction is the whole point of keeping it.** It speculated that
+> usage reporting was lying (a B7-style drift) or that a tripped circuit
+> breaker was short-circuiting the calls. Neither. The reporting was
+> accurate: **no model calls were being made.**
+>
+> **Real cause:** Stage B has _two_ caches, and the non-obvious one is read
+> first.
+>
+> | table             | scope                                  | read by                           |
+> | ----------------- | -------------------------------------- | --------------------------------- |
+> | `matches`         | whole posting (ADR-007)                | `StageBMatcher.match`             |
+> | `partial_matches` | one requirement (ADR-049 resumability) | `StageBMatcher.askOne`, **first** |
+>
+> `askOne` consults `partial_matches` before anything else, and a saved
+> answer whose `evidence` is `null` is returned **with no revalidation at
+> all** — the `saved.evidence === null ||` short-circuit. So every stored
+> `not_met` was replayed verbatim, the whole-posting row was reassembled
+> from those replays and rewritten with a fresh timestamp, and
+> `stageBCacheHit: false` was still _technically true_ because the
+> `matches` row really had been deleted. Three true signals composing into
+> a completely misleading picture.
+>
+> **Consequence worth naming separately:** because that short-circuit skips
+> the applicability guard entirely, a _guard_ change (ADR-057) can never
+> retroactively affect an already-stored `not_met`. The guard's behaviour is
+> not part of the cache key (ADR-042's composite identity covers prompt
+> version, profile hash, requirements hash and model — not this), so
+> invalidation after such a change has to be manual. Not a defect in ADR-042,
+> but a real edge it does not cover, and the reason the "correlation
+> unchanged at 0.468" readings in this session were cache replays rather
+> than measurements.
 
-Those three facts cannot all be true of the same code path. A row can only
-be written after matching; matching with no cache requires model calls;
-model calls would increment the usage counters and log their retries. So
-either the usage reporting is lying (B7 fixed `getUsage()` once already for
-exactly this kind of drift, and may have fixed it incompletely), or the
-matcher has a path that produces `not_met` without calling the model at all
-— a tripped circuit breaker from the earlier `Sail Research` storm is one
-candidate that was **not** checked.
-
-**Why this matters more than it looks:** it means the calibration harness
-currently cannot be trusted to verify a scoring change end to end. Every
-"correlation unchanged at 0.468" reading in this session's later runs was
-produced with `Model calls: 0` — they were cache replays, not measurements,
-and a change that genuinely improved scoring would have looked identical.
-This is a hole in exactly the instrument M7 depends on.
-
-**Resolving it** starts by distinguishing the two candidates above: log the
-circuit breaker's state at run start, and assert in `run-calibration.ts`
-that a deleted cache row actually produces a non-zero attempt count. Neither
-is attempted here — this entry exists so the next scoring change is not
-measured with an instrument already known to be unreliable.
+> **Resolution, 2026-08-22.** `scripts/score-one.ts` (`npm run score:one --
+<fingerprint> [--cold]`) scores a single posting through the real
+> production path and prints every layer's decision per requirement.
+> `--cold` clears **both** tables, and the script prints an explicit warning
+> when a `--cold` run still makes zero model calls — the exact silent
+> failure that produced this entry. Stage A's extraction is deliberately
+> left cached so a cold Stage B run changes one variable, not two.
+>
+> Verified with it immediately: a genuinely cold Smarthis run made **13 real
+> model calls across 10 providers in 24.5s for $0.0026**, and the
+> requirement ADR-057 targets moved `not_met` → `met`, taking the posting
+> from **43.83 `discard` to 50.00 `review`** (mandatoryCoverage 50% → 75%).
+> That is the end-to-end confirmation ADR-057 shipped without.

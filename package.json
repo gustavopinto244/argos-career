@@ -30,6 +30,7 @@
     "calibration:generate": "tsx scripts/generate-calibration-set.ts",
     "calibration:expand": "tsx scripts/select-calibration-batch.ts",
     "calibration:run": "tsx --env-file-if-exists=.env scripts/run-calibration.ts",
+    "score:one": "tsx --env-file-if-exists=.env scripts/score-one.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
