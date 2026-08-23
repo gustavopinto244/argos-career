@@ -1,7 +1,21 @@
 [Unit]
 Description=Collect Catho postings via Playwright and ingest into argos-career
-After=docker.service
-Requires=docker.service
+# NOT `Requires=docker.service` / `After=docker.service`.
+#
+# This is a **user** unit (`systemctl --user`), and `docker.service` is a
+# **system** unit — invisible from the user manager's namespace. Declaring it
+# does not order the job, it makes the job unqueueable: systemd answers
+# "Failed to queue unit startup job: Unit docker.service not found", puts the
+# TIMER into `failed`, and the collector silently never runs again.
+#
+# That is not hypothetical — it is exactly what happened on Atlas
+# (docs/11-known-issues.md B13). The timer read `enabled` the whole time,
+# `journalctl --user -u <service>` had zero entries, and the only Indeed
+# postings in the corpus came from the one manual `docker run` used to test
+# the image before scheduling. Six days of "collection" that never occurred.
+#
+# Docker being up is a practical given on this box; if it is not, `docker run`
+# fails and this oneshot fails loudly, which is the behaviour we want anyway.
 
 [Service]
 Type=oneshot
