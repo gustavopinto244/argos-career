@@ -32,7 +32,17 @@ import sys
 import requests
 from jobspy import scrape_jobs
 
-DEFAULT_SEARCH_TERM = "estagio"
+# Measured, not guessed (docs/11-known-issues.md B13's follow-up,
+# 2026-08-23) -- probed against real Indeed results, 50 rows each, before
+# picking a default: "estagio" alone returned 6/50 titles matching this
+# project's tracks (dev/security/automation); "estagio ti" returned 30/50,
+# including exact-track hits ("Estagiário Full-Stack", "Estagiário DevOps",
+# "Estágio em Desenvolvimento de Software (Back-end / Full Stack)",
+# "TBG - ESTÁGIO - CIÊNCIA DA COMPUTAÇÃO") and real employers (Nubank).
+# "estagio backend"/"estagio devops" were also tried and rejected as too
+# narrow -- 0 and 3 rows respectively, the same near-zero-volume trap
+# criteria.yaml's own Gupy query comments already document.
+DEFAULT_SEARCH_TERM = "estagio ti"
 DEFAULT_LOCATION = "Rio de Janeiro, Brazil"
 DEFAULT_COUNTRY_INDEED = "Brazil"
 DEFAULT_RESULTS_WANTED = "50"
