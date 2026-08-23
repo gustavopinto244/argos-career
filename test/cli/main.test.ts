@@ -1121,6 +1121,7 @@ function deliverCriteria(): Criteria {
       blockingCapScore: 35,
       unknownTrackCapScore: 50,
       stageBConcurrency: 8,
+      ignoredProviders: [],
     },
   };
 }

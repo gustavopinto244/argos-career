@@ -958,6 +958,41 @@ Revisit once the worksheet is closer to the full 50 `docs/04` calls for.
 > ship). **Smarthis's residual Stage B gap stays open**, now with one
 > documented dead end.
 
+> **The hypothesis above was wrong, and the real cause was found,
+> 2026-08-22.** Reproducing in isolation — the step that note said was owed
+> — disproved it immediately: **production's own `b-v4` prompt failed
+> identically**, 0 of 8 usable, once routing landed on the `Sail Research`
+> provider. The two calibration runs had routed to different providers, so
+> the prompt was never the variable that changed. That is a separate and
+> larger problem, recorded as **B11** and fixed by ADR-056.
+>
+> With that provider excluded, the true cause of the Smarthis `not_met`
+> surfaced, and it is neither prompt nor provider: the PR-005/ADR-049
+> applicability guard. Checked deterministically, no model involved —
+> `isKnownProfileEvidence` passes for the Node.js and TypeScript quotes
+> (they are real profile lines) while `isEvidenceApplicableToRequirement`
+> returns **false**, because it requires the competency name or an alias to
+> appear literally in the requirement, and the requirement reads
+> "...como .NET, Python, PHP, Java, C#, VBA, VBScript, **entre outras**"
+> without ever naming Node or TypeScript. `StageBMatcher` then coerces the
+> model's correct `met` to `not_met` with `evidence: null` — exactly the
+> stored row. At the call level the model answered `met` on **13 of 13**
+> usable calls; every one was discarded by the guard.
+>
+> **Fixed by ADR-057**, a per-track generic-skill-category vocabulary beside
+> the existing `FIXED_TAG_TERMS` table. After it the same deterministic
+> check returns `applicable=true`, and replicating the full pipeline
+> decision call-by-call resolves `met` 5 times in 6 — the sixth correctly
+> rejected, the model having quoted the academic-enrollment line, which the
+> guard is right to refuse.
+>
+> **Deliberately not claimed: Smarthis's end-to-end score.** The calibration
+> harness would not exercise a cold Stage B call for this posting no matter
+> how many times its cached rows were deleted (**B12**), so the honest
+> status is that the guard is fixed and verified at unit and call level,
+> while the pipeline number behind it is still unverified. B9 stays open on
+> that basis alone — not because a cause is unknown.
+
 > **`workAvailability` profile field added, 2026-08-19.** Closes the
 > Smarthis work-mode gap above: `profile.ts` gained a fourth declared
 > field alongside `englishLevel`/`minimumStipend`/`maxWeeklyHours`,
@@ -1139,3 +1174,98 @@ deliver` (run `01M0KZY93MBME3TQBW138QV9F3`) confirms the structural
 > has been read for tech vocabulary twice, by two different keyword sets,
 > and both times resolved to either correctly-off-track postings or
 > probe-script noise, not classifier gaps.
+
+---
+
+## B11 — OpenRouter routes the pinned model to 30 different providers, one of which returns garbage
+
+**Status:** fixed for the observed provider (ADR-056); the class of risk
+stays open · **Found:** 2026-08-22, reproducing B9's `b-v5` "regression"
+
+ADR-013 pinned the model. It did not pin what serves it. OpenRouter's own
+`/models/{id}/endpoints` API lists **30 provider endpoints** for
+`deepseek/deepseek-v4-flash-0731`, and it picks one per request — so "same
+model, same prompt" can be two materially different systems from one run to
+the next, invisibly.
+
+This was found while investigating what looked like a Stage B prompt
+regression (B9's `b-v5`: parse-failure 0% → 72%). Isolated single calls
+showed the prompt was innocent — **production's own `b-v4` failed
+identically**, 0 of 8 usable, once routing landed on `Sail Research`, which:
+
+- returns `finish_reason: "stop"` with **completely empty content**, or
+- blows the 768-token completion budget with 2,400–3,700 characters of
+  chain-of-thought against an explicit `reasoning.max_tokens: 300`.
+
+The two calibration runs whose difference triggered the whole investigation
+had simply routed to different providers (`Relace` vs `Sail Research`). An
+uncontrolled variable silently invalidated a comparison the M7 protocol
+treats as controlled — the failure mode `docs/04`'s "change one variable at
+a time" rule exists to prevent.
+
+`provider.require_parameters: true`, the documented control that should
+cover exactly this, **does not work here** and was measured, not assumed:
+`Sail Research` advertises both `max_tokens` and `reasoning` support in the
+endpoints API, so it passes the filter and is still selected. 0/8 usable
+with the flag set, identical to without it.
+
+> **Resolution, 2026-08-22 (ADR-056).** `criteria.scoring.ignoredProviders`
+> (defaulted `[]`) is threaded through `buildScorer` into
+> `OpenRouterClient` and sent as `provider.ignore`; an empty list omits the
+> field entirely, so the default request body is unchanged. `criteria.yaml`
+> ships one entry, `sail-research`, with the measurement justifying it
+> inline. Verified: 4/4 usable immediately after, and later probes land
+> consistently on Baidu with valid JSON. A `criteria-file` test pins the
+> exclusion so dropping it cannot happen silently.
+>
+> **The class of risk stays open, and it is the important part.** Nothing
+> detects a bad provider automatically — this exclusion is reactive by
+> construction, and the detection path is still "a human notices a bad
+> digest and investigates for an afternoon." The data to do better already
+> exists and is already persisted: `runs.llm_provider_counts` and
+> `llm_error_type_counts` (ADR-052) were recording this the whole time and
+> nothing read them. A per-provider failure-rate signal over those columns
+> is the real fix and is not built here.
+>
+> **Also unresolved:** excluding a bad provider does not make a run
+> reproducible — two runs can still use two different good providers, so
+> calibration comparisons stay noisier than the M7 protocol implies. A
+> `--provider` pin for `run-calibration.ts` specifically is the honest
+> follow-up.
+
+---
+
+## B12 — `run-calibration.ts` reports zero model calls yet writes fresh match rows
+
+**Status:** open · **Found:** 2026-08-22, trying to verify ADR-057 end to end
+
+Attempting to confirm ADR-057's fix on the real Smarthis posting, its cached
+`matches` rows were deleted (they are a cache by construction, ADR-007) and
+`npm run calibration:run` re-run. Every time, the run:
+
+- printed `Model calls: 0 | prompt tokens: 0 | completion tokens: 0`,
+- emitted **zero** `stage-b:` log lines for that fingerprint,
+- and yet **wrote a fresh `matches` row** with a current timestamp,
+  containing `not_met` / `evidence: null` for the requirement under test.
+
+Those three facts cannot all be true of the same code path. A row can only
+be written after matching; matching with no cache requires model calls;
+model calls would increment the usage counters and log their retries. So
+either the usage reporting is lying (B7 fixed `getUsage()` once already for
+exactly this kind of drift, and may have fixed it incompletely), or the
+matcher has a path that produces `not_met` without calling the model at all
+— a tripped circuit breaker from the earlier `Sail Research` storm is one
+candidate that was **not** checked.
+
+**Why this matters more than it looks:** it means the calibration harness
+currently cannot be trusted to verify a scoring change end to end. Every
+"correlation unchanged at 0.468" reading in this session's later runs was
+produced with `Model calls: 0` — they were cache replays, not measurements,
+and a change that genuinely improved scoring would have looked identical.
+This is a hole in exactly the instrument M7 depends on.
+
+**Resolving it** starts by distinguishing the two candidates above: log the
+circuit breaker's state at run start, and assert in `run-calibration.ts`
+that a deleted cache row actually produces a non-zero attempt count. Neither
+is attempted here — this entry exists so the next scoring change is not
+measured with an instrument already known to be unreliable.

@@ -492,6 +492,35 @@ scoring:
   # the first call of each posting is issued alone on purpose, and stage B's
   # cache prefix is what makes the cost per posting cents rather than dollars.
   stageBConcurrency: 8
+  # OpenRouter provider slugs never to route to (ADR-056), sent as
+  # `provider.ignore`. ADR-013 pinned the model; it did not pin which of the
+  # 30 providers serving that model answers a given request, so "same model,
+  # same prompt" could still mean two different systems run to run.
+  #
+  # Every entry is a measured observation against this project's own corpus,
+  # never a reputation guess -- the same discipline `blockedCompanies` and
+  # `trackExclusions` follow:
+  #
+  #   sail-research  2026-08-22. Isolated single calls with the *production*
+  #                  b-v4 prompt: 0 of 8 usable. Returned `finish: "stop"`
+  #                  with completely empty content, or blew the 768-token
+  #                  completion budget with 2,400-3,700 characters of
+  #                  reasoning against an explicit `reasoning.max_tokens:
+  #                  300`. It advertises full support for both `max_tokens`
+  #                  and `reasoning` in OpenRouter's own endpoints API,
+  #                  which is why `provider.require_parameters: true` does
+  #                  NOT exclude it (measured: 0/8 usable with that flag
+  #                  set). Excluding it by name is the only lever that
+  #                  worked -- 4/4 usable immediately after.
+  #
+  # Measured good on the same probe, for the record, so a future session does
+  # not re-test them blind: Baidu, OpenInference, Relace. Deliberately NOT an
+  # allowlist -- a list of "known good" providers goes stale silently as
+  # OpenRouter's roster changes, while an exclusion list fails safe (an
+  # unknown new provider is tried, and only excluded once actually observed
+  # failing).
+  ignoredProviders:
+    - sail-research
 
 # Two independent crons (ADR-009, M8). Collection is frequent and cheap — no
 # LLM. Scoring and delivery run once nightly, in an off-peak window, because

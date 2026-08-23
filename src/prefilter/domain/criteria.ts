@@ -99,6 +99,30 @@ export const ScoringConfigSchema = z.object({
    * is what `config/criteria.yaml` is for.
    */
   stageBConcurrency: z.number().int().positive().default(8),
+  /**
+   * OpenRouter provider slugs never to route this model's calls to
+   * (ADR-056), sent as `provider.ignore` on every request.
+   *
+   * ADR-013 pinned the *model* so results stay comparable across runs. It
+   * did not pin what sits underneath it: OpenRouter serves this model from
+   * 30 different providers and picks one per request, so "same model, same
+   * prompt" can still mean two materially different systems — the exact
+   * silent violation of the M7 protocol's "change one variable at a time"
+   * that `docs/11-known-issues.md` B11 measured.
+   *
+   * An exclusion list rather than an allowlist, and configuration rather
+   * than code, for the same reason `blockedCompanies` and
+   * `trackExclusions` are: entries are added when a provider is *observed*
+   * failing against this project's own corpus, and adding the next one must
+   * not require a deploy (principle 3, docs/09). `require_parameters` is
+   * deliberately not used instead — measured useless here, because a broken
+   * provider can advertise full parameter support and still ignore it.
+   *
+   * Defaulted to empty so a criteria file written before this existed stays
+   * valid, the same backward-compatibility discipline the rest of this
+   * schema uses.
+   */
+  ignoredProviders: z.array(z.string().min(1)).default([]),
 });
 
 /**

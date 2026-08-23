@@ -12,6 +12,17 @@ describe("config/criteria.yaml", () => {
     expect(() => loadCriteria(filePath)).not.toThrow();
   });
 
+  it("still excludes the provider measured broken in ADR-056", () => {
+    // Not a style assertion: `sail-research` returned 0 of 8 usable Stage B
+    // responses against production's own prompt (docs/11-known-issues.md
+    // B11). Dropping it from criteria.yaml silently re-admits it to routing,
+    // and the symptom — a digest full of "não foi possível pontuar" — looks
+    // like a model problem, not a config edit.
+    const filePath = join(process.cwd(), "config", "criteria.yaml");
+    const criteria = loadCriteria(filePath);
+    expect(criteria.scoring.ignoredProviders).toContain("sail-research");
+  });
+
   it("keeps dev and security as equal first priorities", () => {
     const filePath = join(process.cwd(), "config", "criteria.yaml");
     const criteria = loadCriteria(filePath);
