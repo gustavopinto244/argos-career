@@ -142,6 +142,16 @@ export const CollectionQuerySchema = z.object({
   city: z.string().min(1).optional(),
   isRemoteWork: z.boolean().optional(),
   maxResults: z.number().int().positive().optional(),
+  /**
+   * Source-specific vacancy-type filter — Gupy's own `type` query
+   * parameter (`GupyCollectorCriteriaSchema`, e.g.
+   * `vacancy_type_internship`). Without this field `CollectionQuerySchema`
+   * silently stripped it (plain `z.object` drops unrecognized keys rather
+   * than erroring), so a `type:` line in `criteria.yaml` parsed
+   * successfully and then never reached the collector at all — found while
+   * adding it in the first place (2026-08-23).
+   */
+  type: z.string().min(1).optional(),
 });
 
 /**
