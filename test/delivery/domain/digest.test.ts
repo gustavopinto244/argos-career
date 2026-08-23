@@ -139,4 +139,102 @@ describe("composeDigest", () => {
     expect(digest.periodBlocked).toEqual(periodBlocked);
     expect(digest.summary).toEqual(summary);
   });
+
+  it("orders recommended postings by score, highest first — not input order", () => {
+    const digest = composeDigest({
+      runId: "run-1",
+      generatedAt: NOW,
+      scored: [
+        scored({
+          posting: posting({ sourceId: "low" }),
+          outcome: outcome({ verdict: "apply", score: 71 }),
+        }),
+        scored({
+          posting: posting({ sourceId: "high" }),
+          outcome: outcome({ verdict: "apply", score: 98 }),
+        }),
+        scored({
+          posting: posting({ sourceId: "mid" }),
+          outcome: outcome({ verdict: "apply", score: 85 }),
+        }),
+      ],
+      periodBlocked: [],
+      summary: {
+        collected: 3,
+        deduplicated: 3,
+        filtered: 3,
+        scored: 3,
+        failedSources: [],
+        truncatedSources: [],
+      },
+    });
+
+    expect(digest.recommended.map((e) => e.posting.sourceId)).toEqual([
+      "high",
+      "mid",
+      "low",
+    ]);
+  });
+
+  it("orders the review section by score too, independently of recommended", () => {
+    const digest = composeDigest({
+      runId: "run-1",
+      generatedAt: NOW,
+      scored: [
+        scored({
+          posting: posting({ sourceId: "r-low" }),
+          outcome: outcome({ verdict: "review", score: 45 }),
+        }),
+        scored({
+          posting: posting({ sourceId: "r-high" }),
+          outcome: outcome({ verdict: "review", score: 68 }),
+        }),
+      ],
+      periodBlocked: [],
+      summary: {
+        collected: 2,
+        deduplicated: 2,
+        filtered: 2,
+        scored: 2,
+        failedSources: [],
+        truncatedSources: [],
+      },
+    });
+
+    expect(digest.review.map((e) => e.posting.sourceId)).toEqual([
+      "r-high",
+      "r-low",
+    ]);
+  });
+
+  it("keeps input order for postings tied on score (stable sort)", () => {
+    const digest = composeDigest({
+      runId: "run-1",
+      generatedAt: NOW,
+      scored: [
+        scored({
+          posting: posting({ sourceId: "first" }),
+          outcome: outcome({ verdict: "apply", score: 90 }),
+        }),
+        scored({
+          posting: posting({ sourceId: "second" }),
+          outcome: outcome({ verdict: "apply", score: 90 }),
+        }),
+      ],
+      periodBlocked: [],
+      summary: {
+        collected: 2,
+        deduplicated: 2,
+        filtered: 2,
+        scored: 2,
+        failedSources: [],
+        truncatedSources: [],
+      },
+    });
+
+    expect(digest.recommended.map((e) => e.posting.sourceId)).toEqual([
+      "first",
+      "second",
+    ]);
+  });
 });
