@@ -1444,6 +1444,54 @@ indistinguishable from a source with nothing to push.
 **Also unfixed:** 6 of the 50 rows came back `unnormalizable`. Not
 investigated — noted so the number is not mistaken for noise later.
 
+> **Follow-up, 2026-08-23 — the timer was firing but the pre-filter never
+> passed anything it found.** With scheduling fixed, the real pre-filter
+> was run against Indeed's actual candidates: **0 of 74 passed**, almost
+> all `track_unknown` — the bare `SEARCH_TERM=estagio` default returns
+> generic internships, the same shape ADR-011's own Gupy query comments
+> already measured and rejected for that source.
+>
+> Probed real Indeed results before changing anything, the same discipline
+> `criteria.yaml`'s query comments use: `"estagio"` alone matched 6 of 50
+> titles to this project's tracks; `"estagio ti"` matched **30 of 50**,
+> including exact-track hits ("Estagiário Full-Stack", "Estágio em
+> Desenvolvimento de Software (Back-end / Full Stack)", "Estagiário
+> DevOps", "TBG - ESTÁGIO - CIÊNCIA DA COMPUTAÇÃO") and real employers
+> (a Nubank internship programme). Narrower terms were tried and rejected
+> on the same near-zero-volume grounds ADR-018 already established:
+> `"estagio backend"` returned 0 rows, `"estagio devops"` only 3.
+>
+> `collect.py`'s `DEFAULT_SEARCH_TERM` changed from `"estagio"` to
+> `"estagio ti"`, with the measurement recorded in the script itself and in
+> `.env.example`. Atlas's real `.env` carries no `SEARCH_TERM` override, so
+> the fix is the new default, not a config edit that could drift from a
+> future fresh install. Verified end to end on Atlas: `jobspy: searching
+Indeed for 'estagio ti'` → `50 rows returned` → the real pre-filter run
+> against the fresh candidates passed **7 of 110** (`dev`/`security`/
+> `automation`, real employers — AFYA, OSKLEN, a Metrô do Rio programme),
+> against **0 of 74** the session before.
+>
+> **A second, unrelated drift surfaced while verifying this and was fixed
+> the same session.** `collectors/indeed/argos-indeed-collect.service` on
+> Atlas still forwarded `-e ARGOS_API_KEY` and `.env` still defined that
+> name — both stale since commit `15ae4c2` renamed the variable to
+> `ARGOS_INGEST_API_KEY` in the repo (part of ADR-047's per-caller
+> credential scoping). The deployed unit was installed once, by hand, and
+> never re-synced after that rename; the repo's own template file had
+> already been correct the whole time. Fixed by copying the repo's unit
+> file over Atlas's live one (it already carries the B13 `docker.service`
+> fix too) and renaming the value in `.env` to match.
+>
+> **This exposes a real gap, not fully closed here:** no
+> `INGEST_INDEED_API_KEY` is configured in `argos-career`'s own `.env` on
+> Atlas at all, so the "Indeed-only ingest credential" `ARGOS_INGEST_API_KEY`
+> is supposed to be is, in practice, the shared **admin** key — able to
+> trigger scoring, delivery, anything. ADR-047 built the capability-scoped
+> credential mechanism; nothing has ever actually configured Indeed's scoped
+> key on the server side. Fixing that means generating and wiring a real
+> `INGEST_INDEED_API_KEY`, a deliberate act with its own value to manage —
+> flagged here rather than done silently mid-session.
+
 ---
 
 ## B14 — The Catho collector was never deployed at all
