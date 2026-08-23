@@ -106,13 +106,27 @@ cost of the status quo was rejecting correct matches on genuine postings.
 The per-track scoping is what keeps it bounded: a `security` competency is
 still not evidence for "a programming language", and that is regression-tested.
 
-**What this does not fix:** Smarthis's computed score was **not** confirmed
-to improve end to end. The calibration harness would not exercise a cold
-Stage B call for it (see `docs/11-known-issues.md` B12), so this ADR claims
-only what was actually verified — the guard now admits the evidence
-(unit-level, deterministic) and the full pipeline decision resolves `met`
-when replicated call-by-call (5/6). A real end-to-end number needs B12
-resolved first.
+**Confirmed end to end after B12 was resolved.** This ADR originally
+shipped claiming only unit- and call-level verification, because the
+calibration harness would not exercise a cold Stage B call. B12 turned out
+to be a second, unnoticed cache (`partial_matches`, read before `matches`)
+replaying stored answers; with both cleared via the new
+`npm run score:one -- <fp> --cold`, the real posting scored with **13 model
+calls across 10 providers in 24.5 s for $0.0026** and the targeted
+requirement moved `not_met` → `met`:
+
+|                    | before          | after              |
+| ------------------ | --------------- | ------------------ |
+| merged requirement | `not_met`       | `met`              |
+| mandatoryCoverage  | 50%             | 75%                |
+| score / verdict    | 43.83 `discard` | **50.00 `review`** |
+
+**What this still does not fix:** 50.00 is not the hand label's 100. The
+remaining gap is two known, separate things — the work-availability
+requirement the model still will not match despite available evidence (B9's
+own `workAvailability` note), and `trackAlignment` at 40%, because
+"Programa de Estágio Smarthis | 2026" matches no track keyword. Neither is
+in this ADR's scope.
 
 **Reversal cost:** low. Delete the table and the four-line branch that reads
 it; the name/alias rule is untouched underneath.
