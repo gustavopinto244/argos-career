@@ -26,6 +26,7 @@
     "restore": "tsx scripts/restore.ts",
     "measure:prefilter": "tsx scripts/measure-prefilter-cut.ts",
     "probe:terms": "tsx scripts/probe-query-terms.ts",
+    "probe:indeed": "tsx scripts/probe-indeed-terms.ts",
     "report:scoring": "tsx scripts/report-scoring.ts",
     "calibration:generate": "tsx scripts/generate-calibration-set.ts",
     "calibration:expand": "tsx scripts/select-calibration-batch.ts",

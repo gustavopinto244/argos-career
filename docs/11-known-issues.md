@@ -1592,3 +1592,48 @@ Beating the block would mean stealth plugins or fingerprint spoofing, which
 is precisely the evasion CLAUDE.md §6 forbids ("never forged to imitate a
 browser") — so the arms-race option is closed by project rule, not just by
 preference. The effort is better spent on sources with an API.
+
+---
+
+## B16 — `normalizeIndeedJob` silently discards ~15% of rows with `company: null`
+
+**Status:** open, not fixed · **Found:** 2026-08-23, measuring candidate
+search terms for ADR-060
+
+`normalizeIndeedJob` (`src/posting/infrastructure/indeed-normalizer.ts`)
+returns `null` — the standard "this item does not become a `Posting`"
+contract (principle 1) — whenever `job.company` is falsy:
+
+```ts
+if (!job.company) return null;
+```
+
+Probing seven candidate `SEARCH_TERMS` values against real Indeed results
+(`collect.py --dry-run`, 2026-08-23, 289 raw rows across the seven terms):
+**44 rows (15.2%) carried `company: null`.** Some of those titles are
+unambiguously on-track — "Estagiário DevOps", "Visagio Talentos - Estágio:
+Desenvolvedor(a) Automação / Low-Code RJ" — and are discarded before the
+pre-filter or track classifier ever sees them, indistinguishable in any
+log line from a row that never existed. `company` is a required, non-empty
+field on `Posting` (`src/posting/domain/posting.ts`), so this is not a
+`createPosting` bug — `Posting.company` genuinely cannot be blank — but the
+normalizer has no fallback for a source that states the field
+inconsistently (the same real posting, scraped under two different search
+terms in the same probe session, had `company` set once and `null` once).
+
+Not fixed here — out of scope for ADR-060, which only needed to confirm
+this does not bias *which* search terms clear the bar (it doesn't: the
+terms ADR-060 accepted cleared it with room, and the two it rejected had
+their zero counts explained by other rows, not null-company ones).
+
+**What fixing it would need:** a real fact to fall back on, per CLAUDE.md
+§15 — not a guess. Candidates worth checking before writing code: does
+`jobspy`'s DataFrame carry a differently-cased or differently-shaped company
+field on those rows (e.g. `company_url` present with `company` empty) that
+this schema currently drops via `.passthrough()`; does the title itself
+reliably embed the employer name for these specific listings (several
+observed do — "Visagio Talentos - Estágio: ..." — but this cannot be
+assumed structurally true without checking a larger sample); or is this
+simply how `jobspy` represents a subset of syndicated/aggregated listings,
+in which case the honest fix may be "cannot recover a company name for
+these, keep discarding them" rather than a code change at all.
