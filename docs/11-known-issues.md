@@ -1361,3 +1361,95 @@ and a **freshly written `matches` row** still containing the old
 > requirement ADR-057 targets moved `not_met` → `met`, taking the posting
 > from **43.83 `discard` to 50.00 `review`** (mandatoryCoverage 50% → 75%).
 > That is the end-to-end confirmation ADR-057 shipped without.
+
+---
+
+## B13 — The Indeed collector never once ran on schedule
+
+**Status:** fixed (both causes) · **Found:** 2026-08-22, auditing collector
+freshness after the profile owner noticed the corpus was missing postings
+visible on Indeed's own portal
+
+Two independent failures, stacked. Either alone would have been enough.
+
+**1. The systemd timer could never fire.** `argos-indeed-collect.service`
+declared `Requires=docker.service` / `After=docker.service`. It is a **user**
+unit; `docker.service` is a **system** unit, invisible from the user
+manager's namespace. Systemd does not treat that as a missing ordering hint
+— it cannot queue the job at all:
+
+```
+argos-indeed-collect.timer: Failed to queue unit startup job: Unit docker.service not found.
+argos-indeed-collect.timer: Failed with result 'resources'.
+```
+
+The timer sat in `failed` while `systemctl --user list-unit-files` still
+reported it `enabled`, which is what made this survive casual inspection.
+The decisive evidence was `journalctl --user -u argos-indeed-collect.service`
+returning **"-- No entries --"**: the service had never executed once in its
+life. Every Indeed posting in the corpus came from the single manual
+`docker run` the README prescribes as a pre-scheduling smoke test.
+
+**2. Once it could run, it could not deliver.** With the timer repaired, the
+scrape worked and the ingest POST died:
+
+```
+ConnectTimeout: HTTPConnectionPool(host='100.112.68.45', port=3000)
+```
+
+`collectors/indeed/.env`'s `ARGOS_API_URL` pointed at a **stale Tailscale
+address**. This is the _same_ re-key that had broken the container's own port
+bind earlier the same day (`ATLAS_TAILSCALE_IP` in the app `.env`). One
+identity change silently broke two unrelated configs, and neither had any
+detection.
+
+> **Resolution, 2026-08-22.** The `docker.service` dependency is removed —
+> **in the repo's unit templates, not only on Atlas** (`collectors/indeed/`
+> and `collectors/catho/` shipped the identical bug, so a fresh install would
+> have reproduced it exactly), with a comment explaining why the obvious
+> declaration is wrong. `ARGOS_API_URL` updated to the current address.
+>
+> Verified end to end: `jobspy: 50 rows returned` → `ingest: HTTP 201` →
+> `{"collected":50,"normalized":44,"isNew":41}`. Indeed went **43 → 87
+> active postings**, and the timer now reports a real `NEXT` (02:00 UTC)
+> instead of `-`.
+
+**What this says beyond Indeed, and the reason it is filed as a defect
+rather than a fixed config:** `runs.attempted_sources` cannot see this.
+Push-based external collectors (ADR-027) never appear in a `collect` run's
+attempted list, so every health signal this project has — the run rows,
+`evaluateCollectionHealth`, the missed-run alert — reported green for six
+days while a source contributed nothing. The corpus looked healthy because
+CIEE and Gupy _were_ healthy. **A source that stops pushing is currently
+indistinguishable from a source that has nothing to push**, and closing that
+needs a per-source freshness check (`MAX(last_seen_at)` per source against an
+expected cadence), which is not built here.
+
+**Also unfixed:** 6 of the 50 rows came back `unnormalizable`. Not
+investigated — noted so the number is not mistaken for noise later.
+
+---
+
+## B14 — The Catho collector was never deployed at all
+
+**Status:** open · **Found:** 2026-08-22, the same collector audit
+
+Catho has **zero postings in the corpus, ever**. Unlike B13 this is not a
+broken deployment — there is no deployment: no systemd unit installed
+(`systemctl --user list-unit-files | grep catho` → nothing), no timer, and no
+`argos-catho-collector` image built on Atlas.
+
+What does exist is the code and a substantial amount of design behind it: a
+headless-browser collector (ADR-032), a checkpoint state machine (ADR-033),
+an exact-origin allowlist with redirect interception (ADR-044), and
+checkpoint durability with quarantine replay (ADR-045). Four ADRs and a
+normalizer registered in `normalizer-registry.ts`, for a source that has
+never contributed a single posting.
+
+**Deliberately not deployed as part of this audit.** Catho is the one
+collector that drives a real browser, it is the heaviest thing this project
+would run on Atlas, and standing it up is a deployment decision with a
+resource cost — not a bug fix to slip into a session about calibration.
+Deciding it needs an explicit call: deploy it, or mark it dormant and stop
+carrying four ADRs' worth of maintenance surface for a source that returns
+nothing.

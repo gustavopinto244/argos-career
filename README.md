@@ -124,7 +124,8 @@ re-run from here whenever that happens.
 | 6   | Same as #5, **after** completing the profile's declared fields (English, availability) — worst-5-deviation subset only, not a full re-run                                                                       | 5   | 5      | 0%            | **0.835**             | 20% / n/a / n/a (100% precision)                                                                                   | $0.0059                                   |
 | 7   | `a-v4`/`b-v4`, worksheet grown to 18 — baseline before [ADR-055](docs/adr/055-stage-a-v5-track-conditional-requirements.md)                                                                                     | 18  | 13     | 28%           | 0.357                 | 40% / 0% / 80% (apply 100% precision)                                                                              | $0.0305                                   |
 | 8   | `a-v5`/`b-v4`, **only** the Stage A prompt changed from #7 (ADR-055 — merges track-conditional requirement branches)                                                                                            | 18  | 18     | 0%            | **0.468**             | 25% / 0% / 86% (apply 100% precision)                                                                              | $0.0272                                   |
-| 9   | Same prompts as #8, **after** four scoring fixes: broken provider excluded (ADR-056), category-named and work-mode evidence admitted (ADR-057/058), score's track derived from extracted requirements (ADR-059) | 18  | 18     | 0%            | **0.621**             | 38% / 0% / 71% (apply 100% precision)                                                                              | $0.0000 (cached — see below)              |
+| 9   | Same prompts as #8, **after** four scoring fixes: broken provider excluded (ADR-056), category-named and work-mode evidence admitted (ADR-057/058), score's track derived from extracted requirements (ADR-059) | 18  | 18     | 0%            | **0.621**             | 38% / 0% / 71% (apply 100% precision)                                                                              | $0.0000 (cached; track-only — see #10)    |
+| 10  | **Same configuration as #9, re-run fully cold** — Stage B cache cleared for all 18, so ADR-057/058 apply to every posting rather than Smarthis alone. The confirmation run.                                     | 18  | 17     | 6%            | **0.662**             | 43% / 33% / 71% (apply 100% precision, discard 63%)                                                                | $0.0139                                   |
 
 **Configurations #1–#3 lost for infrastructure reasons, not model quality** —
 worth keeping because the fix (`OllamaScorer` as a fixed local model,
@@ -204,15 +205,26 @@ it was added). The fourth is a real scoring-model change
 title classifies nothing, which is 86% of this corpus.
 
 `trackAlignment` is not part of any cache key, so #9 was computed from cached
-Stage A/B output — no new model calls, hence $0. That makes it an exact
-measurement of the track change and a stale one for anything needing the
-model re-asked.
+Stage A/B output — no new model calls, hence $0. That made it an exact
+measurement of the track change and a stale one for everything else: the
+other three fixes need the model re-asked to take effect, and 17 of the 18
+postings were still replaying Stage B answers produced before them.
+
+**#10 is that missing run**, and it is the one to trust: Stage B cleared for
+all 18 postings, **167 real model calls, $0.0139**. Every metric improved
+over the cached #9 — correlation 0.621 → **0.662**, `apply` recall 38% →
+**43%**, `discard` precision 56% → **63%** — and `review` came off 0%/0% for
+the first time in this table. The 6% parse-failure is one posting of 18 that
+never returned usable JSON; residual Stage B noise, an order of magnitude
+below the 28-72% seen while the provider bug (ADR-056) was live.
 
 **`apply` recall is the number that matters here** (`docs/04`: "a missed good
-posting costs more than a reviewed bad one"): 25% → 38%, with `apply`
-precision holding at 100%. `discard` recall fell 86% → 71% as the mirror
-image — raising alignment raises scores — while `discard` precision rose.
-That is the trade this project says it wants.
+posting costs more than a reviewed bad one"): 25% → 38% → **43%**, with
+`apply` precision holding at **100%** throughout — the system has never yet
+told this profile to apply to something hand-labelled below the cutoff.
+`discard` recall fell 86% → 71% as the mirror image (raising alignment raises
+scores) while `discard` precision rose 50% → 63%. That is the trade this
+project says it wants.
 
 A scoring system that has never been measured against ground truth is a number
 generator. This one now has three real measurements, eight documented
