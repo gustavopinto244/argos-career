@@ -107,6 +107,44 @@ describe("classifyTrack — degree-name and database phrasing (B10)", () => {
 });
 
 /**
+ * docs/11-known-issues.md B13's follow-up. Found by reading the real
+ * postings the Indeed fix surfaced that the pre-filter still stopped at
+ * track_unknown: two AI/data postings, and English "IT" — spelled with
+ * different letters from Portuguese "ti", so it never matched that entry.
+ */
+describe("classifyTrack — AI/data phrasing and English 'IT' (B13 follow-up)", () => {
+  const tracks = {
+    dev: ["ia", "inteligência artificial"],
+    security: [],
+    automation: ["ti", "it"],
+  };
+
+  it("classifies bare 'IA' as dev", () => {
+    expect(classifyTrack("Estagiário(a) em Dados e IA", tracks)).toEqual([
+      "dev",
+    ]);
+  });
+
+  it("classifies 'Inteligência Artificial' as dev", () => {
+    expect(classifyTrack("Estágio em Inteligência Artificial", tracks)).toEqual(
+      ["dev"],
+    );
+  });
+
+  it("classifies English 'IT' as automation, distinct from Portuguese 'ti'", () => {
+    expect(classifyTrack("IT Support Intern", tracks)).toEqual(["automation"]);
+  });
+
+  it("does not match 'ia' as a substring of an unrelated word", () => {
+    // The exact false-positive shape this addition was checked against
+    // before shipping: "ia" must not bleed into "Fisioterapia" or similar.
+    expect(
+      classifyTrack("Estagiário de Fisioterapia - Leblon", tracks),
+    ).toEqual([]);
+  });
+});
+
+/**
  * ADR-015. "Desenvolvimento" and "segurança" are the two most overloaded
  * words in Brazilian job titles, and both produced 1.0 track alignment on
  * postings hand-labelled 0 in the first calibration run.
@@ -194,6 +232,57 @@ describe("classifyTrack — exclusion phrasing variants found in real postings",
         "ESTAGIÁRIO NA ÁREA DE PSICOLOGIA - Sem experiência (Humano Desenvolvimento)",
         tracks,
         exclusions,
+      ),
+    ).toEqual([]);
+  });
+});
+
+/**
+ * docs/11-known-issues.md B13's follow-up. Found while measuring why 0 of
+ * 74 real Indeed candidates passed the pre-filter: real on-track titles
+ * using vocabulary the keyword list had never needed before (an English
+ * "IT" instead of Portuguese "ti", bare "IA"/"inteligência artificial").
+ */
+describe("classifyTrack — Indeed vocabulary gaps (B13 follow-up)", () => {
+  const tracks = {
+    dev: ["ia", "inteligência artificial"],
+    security: [],
+    automation: ["ti", "it"],
+  };
+
+  it("classifies English 'IT' as automation — different letters from Portuguese 'ti'", () => {
+    expect(classifyTrack("IT Support Intern", tracks)).toEqual(["automation"]);
+  });
+
+  it("classifies bare 'IA' as dev", () => {
+    expect(classifyTrack("Estagiário(a) em Dados e IA", tracks)).toEqual([
+      "dev",
+    ]);
+  });
+
+  it("classifies the full phrase 'inteligência artificial' as dev", () => {
+    expect(classifyTrack("Estágio em Inteligência Artificial", tracks)).toEqual(
+      ["dev"],
+    );
+  });
+
+  it("does not let 'ia' bleed into an unrelated word ending the same way", () => {
+    expect(
+      classifyTrack("Estagiário de Fisioterapia - Leblon", tracks),
+    ).toEqual([]);
+    expect(classifyTrack("Estágio em Farmácia", tracks)).toEqual([]);
+  });
+
+  it("does not classify a bare 'tecnologia' mention that is only in the company's own name", () => {
+    // Deliberately not added as a keyword: the word appearing in a company
+    // name ("... Equipamentos de Energia Elétrica e Tecnologia") is not
+    // evidence the posting itself is tech, the same shape B8 fixed once for
+    // "(Humano Desenvolvimento)".
+    const noTecnologia = { dev: [], security: [], automation: [] };
+    expect(
+      classifyTrack(
+        "ESTAGIÁRIO NA ÁREA DE ENGENHARIA ELÉTRICA - Centro - Sem experiência (CET Brazil Equipamentos de Energia Elétrica e Tecnologia)",
+        noTecnologia,
       ),
     ).toEqual([]);
   });
