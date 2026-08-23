@@ -143,6 +143,47 @@ describe("OpenRouterClient.complete — success", () => {
     expect(body.reasoning).toBeUndefined();
   });
 
+  it("sends provider.ignore when ignoredProviders is configured (ADR-056)", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ choices: [{ message: { content: "x" } }] }),
+    );
+    const c = new OpenRouterClient({
+      apiKey: "test-key",
+      model: "test/model",
+      fetchImpl,
+      ignoredProviders: ["sail-research", "some-other"],
+    });
+    await c.complete("say hi");
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string) as {
+      provider?: { ignore?: string[] };
+    };
+    expect(body.provider).toEqual({
+      ignore: ["sail-research", "some-other"],
+    });
+  });
+
+  it("omits the provider field entirely when no providers are ignored", async () => {
+    // The default request body must stay byte-identical to what it was
+    // before ADR-056 existed — an empty `provider.ignore` is not the same
+    // thing as not constraining routing at all.
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ choices: [{ message: { content: "x" } }] }),
+    );
+    await client(fetchImpl).complete("say hi");
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string) as { provider?: unknown };
+    expect(body.provider).toBeUndefined();
+  });
+
   it("respects a custom baseUrl", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ choices: [{ message: { content: "x" } }] }),

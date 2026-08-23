@@ -85,6 +85,66 @@ describe("isEvidenceApplicableToRequirement (PR-005 mitigation)", () => {
     ).toBe(false);
   });
 
+  describe("generic skill categories (ADR-057, docs/11 B9)", () => {
+    const p = profile({
+      competencies: [
+        {
+          name: "Node.js",
+          tracks: ["dev"],
+          aliases: ["Node"],
+          evidence: ["Built atlas-manager's HTTP layer in Node.js."],
+        },
+        {
+          name: "Firewall administration",
+          tracks: ["security"],
+          aliases: [],
+          evidence: ["Configured UFW on the Atlas homelab."],
+        },
+      ],
+    });
+    const devEvidence = "Built atlas-manager's HTTP layer in Node.js.";
+    const securityEvidence = "Configured UFW on the Atlas homelab.";
+
+    function check(evidence: string, text: string): boolean {
+      return isEvidenceApplicableToRequirement(
+        evidence,
+        { text, category: "technical_skill", weight: "mandatory" },
+        p,
+        TODAY,
+      );
+    }
+
+    it("admits a dev competency for a requirement naming the category, not the tool", () => {
+      // The real Smarthis wording that produced the B9 false negative: it
+      // enumerates examples and says "entre outras", never naming Node.
+      expect(
+        check(
+          devEvidence,
+          "Conhecimento em pelo menos uma linguagem de programação, como .NET, Python, PHP, Java, C#, VBA, VBScript, entre outras",
+        ),
+      ).toBe(true);
+    });
+
+    it("admits the English phrasing too", () => {
+      expect(
+        check(devEvidence, "Knowledge of at least one programming language"),
+      ).toBe(true);
+    });
+
+    it("does not admit a competency from an unrelated track", () => {
+      // The widening is per-track, not global — a firewall competency is
+      // not evidence for "a programming language".
+      expect(
+        check(securityEvidence, "Conhecimento em uma linguagem de programação"),
+      ).toBe(false);
+    });
+
+    it("still rejects a specific requirement naming a different tool", () => {
+      // The original guard is intact: no generic term, no widening.
+      expect(check(devEvidence, "Experiência com Python")).toBe(false);
+    });
+  });
+
   it("maps declared academic evidence to academic requirement vocabulary", () => {
     const p = profile();
     const evidence =

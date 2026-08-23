@@ -533,6 +533,10 @@ export interface OpenRouterClientOptions {
    * and Stage B alike, since `build-scorer.ts` constructs exactly one
    * `OpenRouterClient` per run and both stages call through it. */
   circuitBreaker?: CircuitBreaker;
+  /** ADR-056: OpenRouter provider slugs to exclude from routing, sent as
+   * `provider.ignore`. Empty (the default) omits the field entirely,
+   * leaving OpenRouter's normal routing untouched. */
+  ignoredProviders?: readonly string[];
 }
 
 /**
@@ -557,6 +561,7 @@ export class OpenRouterClient {
   private readonly maxCompletionTokens: number;
   private readonly maxResponseBytes: number;
   private readonly circuitBreaker: CircuitBreaker;
+  private readonly ignoredProviders: readonly string[];
 
   private calls = 0;
   private promptTokens = 0;
@@ -590,6 +595,7 @@ export class OpenRouterClient {
       options.maxCompletionTokens ?? DEFAULT_MAX_COMPLETION_TOKENS;
     this.maxResponseBytes =
       options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+    this.ignoredProviders = options.ignoredProviders ?? [];
     if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs <= 0) {
       throw new Error("OpenRouter timeoutMs must be a positive safe integer");
     }
@@ -798,6 +804,11 @@ export class OpenRouterClient {
           max_tokens: maxCompletionTokens,
           ...(reasoningMaxTokens !== undefined
             ? { reasoning: { max_tokens: reasoningMaxTokens } }
+            : {}),
+          // ADR-056. Omitted entirely when empty so the default request
+          // body is byte-identical to what it was before this existed.
+          ...(this.ignoredProviders.length > 0
+            ? { provider: { ignore: [...this.ignoredProviders] } }
             : {}),
         }),
         signal: controller.signal,

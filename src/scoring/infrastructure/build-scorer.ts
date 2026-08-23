@@ -109,6 +109,9 @@ export function buildScorer(
       ...(process.env.LLM_BASE_URL
         ? { baseUrl: process.env.LLM_BASE_URL }
         : {}),
+      // ADR-056: pinning the model (ADR-013) does not pin the provider
+      // underneath it, and a broken one silently poisons a whole run.
+      ignoredProviders: criteria.scoring.ignoredProviders,
     });
     const askStageA = (prompt: string) =>
       client.complete(prompt, {

@@ -1,4 +1,4 @@
-import { Profile } from "../../profile/domain/profile";
+import { Profile, ProfileTrack } from "../../profile/domain/profile";
 import { buildEvidenceCatalog } from "./evidence-catalog";
 import { Requirement } from "./types";
 
@@ -114,6 +114,41 @@ const FIXED_TAG_TERMS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
+ * Generic skill-category vocabulary, per track (ADR-057).
+ *
+ * The name/alias rule below assumes a requirement names the *specific* tool
+ * it wants. Real postings often name a category and then enumerate examples
+ * — "conhecimento em pelo menos uma linguagem de programação, como .NET,
+ * Python, PHP, Java, C#, VBA, VBScript, **entre outras**". A candidate
+ * evidencing Node.js or TypeScript satisfies that requirement, but neither
+ * token appears in it, so the name/alias rule rejected a real quote and
+ * `StageBMatcher` coerced a correct `met` to `not_met`
+ * (docs/11-known-issues.md B9, measured on the real Smarthis posting).
+ *
+ * A term here makes every competency **tagged with that track** applicable,
+ * which is why the lists are deliberately short and category-naming: they
+ * are the phrases that genuinely mean "any skill of this kind", not
+ * ordinary topic words. `programacao` alone is intentionally absent —
+ * "desenvolvimento de programação de férias" is the same false-positive
+ * shape ADR-011/015 already fights in the pre-filter.
+ *
+ * Kept in code beside `FIXED_TAG_TERMS` rather than in `criteria.yaml`
+ * because it is the same kind of table, read by the same function, and
+ * splitting one guard's vocabulary across two homes would make it harder to
+ * review as a whole.
+ */
+const GENERIC_SKILL_TERMS: Readonly<Record<ProfileTrack, readonly string[]>> = {
+  dev: [
+    "linguagem de programacao",
+    "linguagens de programacao",
+    "programming language",
+    "programming languages",
+  ],
+  security: ["seguranca da informacao", "information security"],
+  automation: [],
+};
+
+/**
  * Lexical semantic guard for PR-005. Provenance alone answers “is this a real
  * quote?”; this additionally requires the quoted catalog entry's competency
  * name/alias or declared-field vocabulary to appear in the requirement being
@@ -121,6 +156,15 @@ const FIXED_TAG_TERMS: Readonly<Record<string, readonly string[]>> = {
  * a malicious requirement can repeat a relevant token while directing the
  * model to use unrelated evidence. That limitation is regression-tested and
  * remains documented in ADR-049.
+ *
+ * ADR-057 adds one bounded widening: a requirement naming a generic skill
+ * category (`GENERIC_SKILL_TERMS`) admits evidence from any competency on
+ * the matching track. This trades a slightly wider version of the
+ * already-documented ADR-049 limitation for a measured false negative on a
+ * real posting, in the direction `docs/04-scoring-model.md` explicitly
+ * prefers ("a missed good posting costs more than a reviewed bad one").
+ * Provenance itself is untouched: the quote must still be a verbatim,
+ * exact-match profile line, so nothing here lets the model invent evidence.
  */
 export function isEvidenceApplicableToRequirement(
   evidence: string,
@@ -146,7 +190,18 @@ export function isEvidenceApplicableToRequirement(
     (candidate) => candidate.name === entry.tag,
   );
   if (!competency) return false;
-  return [competency.name, ...competency.aliases].some((term) =>
-    includesTerm(requirementText, term),
+  if (
+    [competency.name, ...competency.aliases].some((term) =>
+      includesTerm(requirementText, term),
+    )
+  ) {
+    return true;
+  }
+  // ADR-057: the requirement names a skill *category* this competency
+  // belongs to, rather than the competency itself.
+  return competency.tracks.some((track) =>
+    (GENERIC_SKILL_TERMS[track] ?? []).some((term) =>
+      includesTerm(requirementText, term),
+    ),
   );
 }

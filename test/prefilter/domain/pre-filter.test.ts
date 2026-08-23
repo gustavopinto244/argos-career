@@ -48,6 +48,7 @@ function baseCriteria(overrides: Partial<Criteria> = {}): Criteria {
       blockingCapScore: 35,
       unknownTrackCapScore: 50,
       stageBConcurrency: 8,
+      ignoredProviders: [],
     },
     ...overrides,
   };
