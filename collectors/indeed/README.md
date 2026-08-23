@@ -113,7 +113,7 @@ npm run probe:indeed -- collectors/indeed/dry-run-output/dry-run.json
 
 A term only earns a place in `DEFAULT_SEARCH_TERMS` once it clears the same
 bar every `criteria.yaml` query comment already documents: real volume that
-survives the pre-filter *and* lands in the target metro area or remote, not
+survives the pre-filter _and_ lands in the target metro area or remote, not
 a raw hit count.
 
 ## Discovery coverage gap (docs/audit AC-023) — mostly closed by ADR-060

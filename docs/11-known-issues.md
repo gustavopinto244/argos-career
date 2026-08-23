@@ -1622,7 +1622,7 @@ inconsistently (the same real posting, scraped under two different search
 terms in the same probe session, had `company` set once and `null` once).
 
 Not fixed here — out of scope for ADR-060, which only needed to confirm
-this does not bias *which* search terms clear the bar (it doesn't: the
+this does not bias _which_ search terms clear the bar (it doesn't: the
 terms ADR-060 accepted cleared it with room, and the two it rejected had
 their zero counts explained by other rows, not null-company ones).
 

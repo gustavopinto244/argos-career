@@ -85,7 +85,12 @@ async function main(): Promise<void> {
   for (const term of dump.terms) {
     const rows = dump.perTerm[term] ?? [];
     const postings = rows
-      .map((row) => normalizeIndeedJob({ source: "indeed", sourceId: String(row.id ?? ""), payload: row }, now))
+      .map((row) =>
+        normalizeIndeedJob(
+          { source: "indeed", sourceId: String(row.id ?? ""), payload: row },
+          now,
+        ),
+      )
       .filter((p): p is NonNullable<typeof p> => p !== null);
     const passes = postings.filter(
       (p) => applyPreFilter(p, criteria, profileKeywords, now).passed,

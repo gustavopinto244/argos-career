@@ -29,7 +29,7 @@ The obvious naive approach — just add more terms — is exactly what
 `docs/11-known-issues.md` B13's follow-up and ADR-018 already warn
 against: a term with volume and zero on-track yield spends request budget
 (and, if ingested, later Stage A/B budget) to be discarded. Every term
-added here had to be measured against the *real* pre-filter/track/location
+added here had to be measured against the _real_ pre-filter/track/location
 rules first, not guessed from the term's Portuguese wording.
 
 ## Considered options
@@ -55,7 +55,7 @@ scheduling side.
 
 ### C. Measure candidate terms by hand against the live site before deciding
 
-Rejected as the *only* discipline, kept as the *first* step. A manual
+Rejected as the _only_ discipline, kept as the _first_ step. A manual
 one-off probe cannot be re-run later when a term's real-world yield drifts
 (a company's hiring season ends, a phrasing goes out of fashion) — the same
 reason `npm run probe:terms` exists as a script and not a one-time
@@ -84,21 +84,21 @@ process this repository does not call directly.
 **Measured 2026-08-23**, 50 rows/term (32 for the one that ran dry),
 Rio de Janeiro, against the real corpus's criteria and profile:
 
-| term | rows | pre-filter passes | on-track | on-track, in-region |
-| --- | ---: | ---: | ---: | ---: |
-| estagio ti (existing default) | 50 | 9 | 9 | 9 |
-| estagio desenvolvimento | 50 | 2 | 2 | 2 |
-| estagio suporte | 50 | 3 | 3 | 3 |
-| estagio seguranca da informacao | 50 | 2 | 2 | 2 |
-| estagio infraestrutura | 32 | 4 | 4 | 4 |
-| estagio dados | 50 | 0 | 0 | 0 |
-| estagio programador | 7 | 0 | 0 | 0 |
+| term                            | rows | pre-filter passes | on-track | on-track, in-region |
+| ------------------------------- | ---: | ----------------: | -------: | ------------------: |
+| estagio ti (existing default)   |   50 |                 9 |        9 |                   9 |
+| estagio desenvolvimento         |   50 |                 2 |        2 |                   2 |
+| estagio suporte                 |   50 |                 3 |        3 |                   3 |
+| estagio seguranca da informacao |   50 |                 2 |        2 |                   2 |
+| estagio infraestrutura          |   32 |                 4 |        4 |                   4 |
+| estagio dados                   |   50 |                 0 |        0 |                   0 |
+| estagio programador             |    7 |                 0 |        0 |                   0 |
 
 The five terms with a nonzero net were added to `DEFAULT_SEARCH_TERMS`. The
 last two were measured, not guessed, and deliberately excluded — but not
 dismissed as off-topic: reading the individual rows (not just the count)
 showed both surfaced real on-track-by-title postings that failed on a
-*different* axis than relevance —
+_different_ axis than relevance —
 
 - `estagio dados`: "ESTAGIÁRIO DE TI | DESENVOLVIMENTO" classified
   `dev`+`automation` by title but failed `location_not_allowed`
