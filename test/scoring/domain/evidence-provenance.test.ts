@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { Profile } from "../../../src/profile/domain/profile";
 import {
+  FIXED_TAG_TERMS,
   isEvidenceApplicableToRequirement,
   isKnownProfileEvidence,
   stripEvidenceTag,
 } from "../../../src/scoring/domain/evidence-provenance";
+import { buildEvidenceCatalog } from "../../../src/scoring/domain/evidence-catalog";
 
 function profile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -40,6 +42,35 @@ describe("stripEvidenceTag", () => {
 
   it("leaves an undecorated quote unchanged", () => {
     expect(stripEvidenceTag("Built the API.")).toBe("Built the API.");
+  });
+});
+
+/**
+ * ADR-058's standing guard. `evidence-catalog.ts` decides which declared
+ * fields become quotable lines and what tag each carries;
+ * `evidence-provenance.ts` decides which requirement vocabulary each tag
+ * answers. Nothing connects them, so a field added to the first without the
+ * second becomes evidence the model can quote and the guard always rejects
+ * — which is exactly what happened to `Work availability`.
+ */
+describe("declared-field tags stay in sync with FIXED_TAG_TERMS (ADR-058)", () => {
+  it("every non-competency tag the catalog emits has requirement vocabulary", () => {
+    const p = profile();
+    const competencyNames = new Set(p.competencies.map((c) => c.name));
+    const declaredTags = [
+      ...new Set(
+        buildEvidenceCatalog(p, new Date("2026-08-15"))
+          .map((entry) => entry.tag)
+          .filter((tag) => !competencyNames.has(tag)),
+      ),
+    ];
+
+    // Sanity: the fixture really does exercise every declared field, so a
+    // future field cannot slip past by simply being absent from it.
+    expect(declaredTags.length).toBeGreaterThanOrEqual(5);
+
+    const orphaned = declaredTags.filter((tag) => !FIXED_TAG_TERMS[tag]);
+    expect(orphaned).toEqual([]);
   });
 });
 
@@ -142,6 +173,62 @@ describe("isEvidenceApplicableToRequirement (PR-005 mitigation)", () => {
     it("still rejects a specific requirement naming a different tool", () => {
       // The original guard is intact: no generic term, no widening.
       expect(check(devEvidence, "Experiência com Python")).toBe(false);
+    });
+  });
+
+  describe("work availability (ADR-058, docs/11 B9)", () => {
+    const p = profile();
+    const workMode = "40h remoto, disponível dias úteis.";
+    const weeklyHours = "Disponibilidade de até 30 horas semanais.";
+
+    function check(evidence: string, text: string, category: string): boolean {
+      return isEvidenceApplicableToRequirement(
+        evidence,
+        { text, category, weight: "mandatory" },
+        p,
+        TODAY,
+      );
+    }
+
+    it("admits the work-mode line for a remote/hybrid requirement", () => {
+      // The B9 case. Before ADR-058 this returned false for every
+      // requirement that exists: the catalog emitted a "Work availability"
+      // tag that FIXED_TAG_TERMS had no entry for, so the lookup fell
+      // through to a competency search that could never match.
+      expect(
+        check(
+          workMode,
+          "Disponibilidade para atuar em modelo híbrido ou remoto",
+          "availability",
+        ),
+      ).toBe(true);
+    });
+
+    it("admits it for an on-site requirement too", () => {
+      expect(
+        check(workMode, "Trabalho 100% presencial na sede", "availability"),
+      ).toBe(true);
+    });
+
+    it("does not answer a weekly-hours requirement with the work-mode line", () => {
+      // The two availability facts stay separate: hours vocabulary belongs
+      // to the `Availability` tag, work-mode vocabulary to this one.
+      expect(
+        check(workMode, "Disponibilidade de 30 horas semanais", "availability"),
+      ).toBe(false);
+      expect(
+        check(
+          weeklyHours,
+          "Disponibilidade de 30 horas semanais",
+          "availability",
+        ),
+      ).toBe(true);
+    });
+
+    it("does not admit the work-mode line for an unrelated requirement", () => {
+      expect(
+        check(workMode, "Conhecimento em Node.js", "technical_skill"),
+      ).toBe(false);
     });
   });
 
