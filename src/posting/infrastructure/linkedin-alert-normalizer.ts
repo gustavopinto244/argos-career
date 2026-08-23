@@ -59,11 +59,34 @@ function mapWorkModeLabel(label: string): WorkMode {
 }
 
 /**
+ * LinkedIn's own `/jobs/view/<digits>/` URL shape, observed on every real
+ * `link` sampled (including the 2026-08-23 row that motivated this
+ * fallback). Not a guess at the id — the id is already present, verbatim,
+ * inside a field this schema already validates; extracting it here is
+ * reading a fact we already have, not inventing one (CLAUDE.md §15).
+ */
+function deriveSourceIdFromLink(link: string | null | undefined): string {
+  if (!link) return "";
+  const match = /\/jobs\/view\/(\d+)/.exec(link);
+  return match?.[1] ?? "";
+}
+
+/**
  * `RawPosting` → `Posting`, for LinkedIn job-alert emails (ADR-029).
- * `sourceId` is trusted from the envelope, same as every other source — the
- * caller (n8n) extracts the numeric id from the `link`'s
- * `/jobs/view/<id>/` path before POSTing, this normalizer does not
- * re-derive it.
+ *
+ * `sourceId` was originally documented as "trusted from the envelope... the
+ * caller (n8n) extracts the numeric id from the link's `/jobs/view/<id>/`
+ * path before POSTing, this normalizer does not re-derive it." Real ingest
+ * runs (`docs/11-known-issues.md` B15, 2026-08-18 through 2026-08-23)
+ * showed that assumption was false: `raw.sourceId` arrived empty on every
+ * item — confirmed directly against `posting_events.source_id`, which
+ * recorded `null` for every rejected row, not a real id. Whatever n8n
+ * sends, it is not populating the envelope's `sourceId`. Rather than keep
+ * trusting a fact that measurably is not true, this normalizer now falls
+ * back to `deriveSourceIdFromLink(job.link)` whenever `raw.sourceId` is
+ * empty — the envelope is still preferred when a caller does supply it
+ * (Indeed's collector, any future well-behaved caller), so this is a
+ * fallback, not a replacement.
  *
  * `publishedAt` is always null. LinkedIn's alert email states no
  * publication date, only when the alert was sent — which is not the same
@@ -89,11 +112,16 @@ export function normalizeLinkedinAlertJob(
 
   const job: LinkedinAlertJob = parsed.data;
   const { location, workMode } = parseLocationAndWorkMode(job.location);
+  const sourceId =
+    raw.sourceId && raw.sourceId.trim().length > 0
+      ? raw.sourceId
+      : deriveSourceIdFromLink(job.link);
+  if (!sourceId) return null;
 
   try {
     return createPosting({
       source: raw.source,
-      sourceId: raw.sourceId,
+      sourceId,
       company: job.company,
       title: job.title,
       location,

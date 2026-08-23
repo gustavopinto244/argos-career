@@ -1637,3 +1637,100 @@ assumed structurally true without checking a larger sample); or is this
 simply how `jobspy` represents a subset of syndicated/aggregated listings,
 in which case the honest fix may be "cannot recover a company name for
 these, keep discarding them" rather than a code change at all.
+
+---
+
+## B15 — LinkedIn's real n8n ingest was silently discarded, 100%, since it started
+
+**Status:** fixed, pending confirmation against the next real delivery ·
+**Found:** 2026-08-23, investigating why the corpus has zero LinkedIn
+postings despite ADR-029 shipping weeks earlier
+
+The user reported ingest calls to `/runs/collect/external` succeeding
+(`HTTP 201`) for LinkedIn, which contradicted `postings` having zero
+`source = 'linkedin'` rows. Queried Atlas's real `runs` table directly
+(read-only `docker exec`): three real ingest runs —
+`01M09D05CN26CX5BGAD2XDSSVC` (2026-08-18, 4 items),
+`01M0H46C3745K15XBH8GMXTGK0` (2026-08-21, 13 items),
+`01M0P2Z81F2VRSYGMDSBBCXJA8` (2026-08-23, 16 items) — every one
+`outcome: success`, and every one with `normalized: 0`. All 33 items across
+the three runs hit `normalization_rejected`, with `posting_events`'
+`source_id` column recording `null` for every one of them, not a real id.
+
+`LinkedinAlertJobSchema` (`linkedin-alert-schema.ts`) required lowercase
+`title`/`company` keys. It was fitted, per its own doc comment and
+`test/fixtures/linkedin-jobs.md`'s provenance note, from a **screenshot**
+of the n8n extraction table (2026-08-16) — never a captured real request,
+exactly the gap CLAUDE.md §15 warns costs something eventually. That same
+provenance file already named `Subject`/`ReceivedAt`/`ExtractedAt` as real
+observed columns, Title Case, alongside the schema's own lowercase
+`title`/`company` guess — an inconsistency nobody had reason to notice
+until a real row surfaced.
+
+The operator pasted a real n8n row 2026-08-23:
+
+```
+[Estagiariamente 2.2026- Núclea] - Programa de Estágio | Dados, Produtos & IA
+Núclea    São Paulo, SP (Híbrido)    https://www.linkedin.com/jobs/view/4451703964/
+Fwd: "estagio software vagas anunciadas…": vaga de Estágio em Desenvolvimento
+Backend na empresa Bemobi Wave anunciada em 15/8/26    2026-08-16T18:36:00.019Z
+```
+
+Both "Núclea" and "Bemobi Wave" are the exact same companies
+`linkedin-jobs.md`'s original 2026-08-16 provenance note already named as
+appearing in the real screenshot — strong corroboration this is genuinely
+representative of the real table, not a one-off. The Subject text names a
+_different_ posting (Bemobi Wave) than the row's own Title/Company
+(Núclea) — confirming one email digest bundles several postings under one
+Subject, consistent with `Subject` being correctly treated as unused,
+passthrough-only metadata.
+
+**Two independent, stacked defects, not one:**
+
+1. **Field casing.** The real row's structure is best explained by Title
+   Case keys (`Title`, `Company`, `Location`, `Link`) rather than the
+   lowercase names the schema required — matching the already-documented
+   `Subject`/`ReceivedAt`/`ExtractedAt`. **Not a confirmed raw-JSON
+   capture** — the pasted evidence is a rendered table row, not the HTTP
+   Request node's literal body — so this is the best-supported hypothesis,
+   flagged as such in the code, not asserted as verified fact.
+2. **Missing `sourceId`.** Directly confirmed, not hypothesized:
+   `posting_events.source_id` was `null` for every one of the 33 rejected
+   items across all three runs. Whatever n8n sends, the envelope's
+   `sourceId` field is not populated — contradicting the normalizer's own
+   prior doc comment, which assumed "the caller (n8n) extracts the numeric
+   id from the link's `/jobs/view/<id>/` path before POSTing."
+
+> **Fixed, 2026-08-23.** `LinkedinAlertJobSchema` now lower-cases every
+> payload key before validation (`z.preprocess`), so both the Title-Case
+> shape the real row is best explained by and the original lowercase
+> shape (this fixture's own, any hand-built caller) validate identically —
+> tolerant of either, per CLAUDE.md §15's "write tolerant code" guidance
+> for a boundary that still isn't fully confirmed.
+>
+> `normalizeLinkedinAlertJob` now falls back to deriving `sourceId` from
+> `job.link`'s `/jobs/view/<digits>/` suffix whenever the envelope's
+> `sourceId` is empty — reading a fact already present in a field this
+> schema already validates, not inventing one. The envelope is still
+> preferred when a caller does supply it.
+>
+> `executeIngestExternal` (`src/cli/main.ts`) now records content-free
+> structural metadata (`payloadKeys`, `hasSourceId` — field names only,
+> never values, matching `docs/08`'s boundary) on every
+> `normalization_rejected` event. This is what should have made B15
+> diagnosable straight from `posting_events` instead of requiring a pasted
+> real payload to explain it after the fact.
+>
+> `alerts.sourceFreshnessHours.linkedin: 96` added — `linkedin` was
+> entirely absent from the freshness check before this, the same blind
+> spot B13 already named for Indeed and B14 for Catho, now closed for the
+> third source running through this mechanism.
+>
+> **Not yet confirmed against a real delivery.** Every fix here is
+> covered by unit tests reproducing the exact real-row shape (Title-Case
+> keys, empty envelope `sourceId`, `/jobs/view/<digits>/` link), but the
+> genuinely conclusive check — a real n8n run landing `normalized > 0` and
+> a `source = 'linkedin'` row actually appearing in Atlas's `postings`
+> table — has not happened yet. If it still fails, `payloadKeys` on the
+> next `normalization_rejected` event will say exactly why, closing the
+> loop this entry's own investigation had to do by hand.

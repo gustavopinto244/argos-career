@@ -509,6 +509,33 @@ export interface IngestExternalOutcome {
 }
 
 /**
+ * Content-free structural summary of a rejected external-ingest item —
+ * field *names*, never values (docs/08-observability.md's boundary around
+ * log lines applies equally to event metadata). Added after
+ * `docs/11-known-issues.md` B15: a whole batch of real LinkedIn postings
+ * was silently discarded for days because `unnormalizable_count` and the
+ * `normalization_rejected` event carried no information about *why* — only
+ * a direct read of the caller's actual field-casing bug (found by pasting
+ * a real payload) explained it. This is what should have made that
+ * diagnosable from the database alone.
+ */
+function describeUnnormalizablePayload(
+  raw: ExternalRawPosting,
+): Readonly<Record<string, unknown>> {
+  const hasSourceId =
+    typeof raw.sourceId === "string" && raw.sourceId.trim().length > 0;
+  const payload = raw.payload;
+  if (payload === null || typeof payload !== "object") {
+    return { hasSourceId, payloadType: typeof payload };
+  }
+  return {
+    hasSourceId,
+    payloadType: "object",
+    payloadKeys: Object.keys(payload as Record<string, unknown>).sort(),
+  };
+}
+
+/**
  * The testable core of the external-ingest endpoint (ADR-027) — a source
  * that fetches outside this process (jobspy, in an ephemeral container on
  * Atlas's host, never inside the app container) and hands over already-
@@ -583,6 +610,7 @@ export async function executeIngestExternal(
           stage: "collect",
           outcome: "normalization_rejected",
           occurredAt: collectedAt,
+          metadata: describeUnnormalizablePayload(raw),
         });
         continue;
       }

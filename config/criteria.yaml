@@ -585,6 +585,14 @@ alerts:
   #                      weekend.
   #   indeed             its own systemd timer runs twice daily; 36h is a
   #                      little over one missed run.
+  #   linkedin           the n8n workflow's own schedule (ADR-029) is the
+  #                      user's infrastructure, not this repository's --
+  #                      no fixed cadence to measure against. The three
+  #                      real ingest runs observed 2026-08-18 through
+  #                      2026-08-23 were 72h and 46h apart, not daily
+  #                      (job-alert volume is itself irregular). 96h gives
+  #                      slack over the worst gap actually seen rather than
+  #                      an assumed schedule.
   #
   # `catho` is deliberately absent: it has never been deployed (B14), and
   # listing it would alert every cycle about a decision nobody has made yet.
@@ -594,3 +602,4 @@ alerts:
     ciee: 72
     solides: 72
     indeed: 36
+    linkedin: 96
