@@ -36,6 +36,28 @@ describe("CriteriaSchema", () => {
     expect(CriteriaSchema.safeParse(validCriteria()).success).toBe(true);
   });
 
+  // Regression test for a real bug (2026-08-23): CollectionQuerySchema had
+  // no `type` field, so a plain z.object silently stripped it instead of
+  // erroring -- `criteria.yaml` parsed successfully with a `type:` line
+  // present, and the collector never received it. A query field that
+  // disappears without a validation error is worse than one that fails
+  // loudly.
+  it("passes a collection query's type field through, not stripped", () => {
+    const result = CriteriaSchema.parse({
+      ...validCriteria(),
+      collection: {
+        queries: [
+          {
+            source: "gupy",
+            jobName: "estágio",
+            type: "vacancy_type_internship",
+          },
+        ],
+      },
+    });
+    expect(result.collection.queries[0]?.type).toBe("vacancy_type_internship");
+  });
+
   it("requires titleRequired to have at least one entry", () => {
     const criteria = { ...validCriteria(), titleRequired: [] };
     expect(CriteriaSchema.safeParse(criteria).success).toBe(false);

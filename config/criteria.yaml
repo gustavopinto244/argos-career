@@ -16,39 +16,65 @@
 # Narrow on purpose: Rio de Janeiro or remote, matching CLAUDE.md 6. Both the
 # masculine and feminine job terms are listed because Gupy matches the query
 # string literally -- "estagiario" does not find "Pessoa Estagiaria".
+#
+# Every Gupy query below also sends `type: vacancy_type_internship`
+# (added 2026-08-23). Measured live against Gupy's own API before adding,
+# at the real 50-per-query cap (`GupyCollector`'s `DEFAULT_MAX_RESULTS`)
+# production actually runs at, for all six Rio/remote title queries above:
+# adding the type filter drops 27 non-internship rows that were consuming
+# slots within that cap (10 `vacancy_type_effective`, a permanent hire, not
+# an internship; 17 `vacancy_type_talent_pool`) and **zero** rows that were
+# genuinely `vacancy_type_internship` -- the filter is safe, it never
+# excludes a real internship. Freeing those 27 slots let 10 postings that
+# were previously past position 50 (and therefore never fetched at all)
+# fit inside the cap instead. One of the ten is a real, on-track,
+# currently-missed posting: "Estagiário DevOps", Anbima's own 2026
+# internship program, Rio de Janeiro, classifies `automation`. This is a
+# genuine discovery gain, not only the cost saving originally assumed here
+# -- corrected after measuring, not left as the first guess.
 collection:
   queries:
     - source: gupy
+      type: vacancy_type_internship
       jobName: estágio
       city: Rio de Janeiro
     - source: gupy
+      type: vacancy_type_internship
       jobName: estágio
       isRemoteWork: true
     - source: gupy
+      type: vacancy_type_internship
       jobName: estagiário
       city: Rio de Janeiro
     - source: gupy
+      type: vacancy_type_internship
       jobName: estagiário
       isRemoteWork: true
     - source: gupy
+      type: vacancy_type_internship
       jobName: estagiária
       city: Rio de Janeiro
     - source: gupy
+      type: vacancy_type_internship
       jobName: estagiária
       isRemoteWork: true
     # Niteroi and Sao Goncalo are already accepted by the location rule, but
     # nothing was asking the source for them -- being allowed through the
     # filter is useless if the query never brings them back.
     - source: gupy
+      type: vacancy_type_internship
       jobName: estágio
       city: Niterói
     - source: gupy
+      type: vacancy_type_internship
       jobName: estagiário
       city: Niterói
     - source: gupy
+      type: vacancy_type_internship
       jobName: estágio
       city: São Gonçalo
     - source: gupy
+      type: vacancy_type_internship
       jobName: estagiário
       city: São Gonçalo
     # The remaining 7 cities `location.cities` accepts (Duque de Caxias, Nova
@@ -86,12 +112,16 @@ collection:
     # geography here would mostly return nothing. The pre-filter handles the
     # location axis for them.
     - source: gupy
+      type: vacancy_type_internship
       jobName: estágio desenvolvimento
     - source: gupy
+      type: vacancy_type_internship
       jobName: estagiário desenvolvimento
     - source: gupy
+      type: vacancy_type_internship
       jobName: estágio backend
     - source: gupy
+      type: vacancy_type_internship
       jobName: estágio software
     # --- CIEE (ADR-021) ---------------------------------------------------
     # ONE query, deliberately. CIEE ignores every filter parameter, so its
