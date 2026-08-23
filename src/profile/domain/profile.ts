@@ -7,8 +7,21 @@ import { z } from "zod";
  * Distinct from `Track` in the scoring domain, which includes `unknown` as
  * the pre-filter's fallback for a posting it cannot classify — a profile
  * competency is never "unknown", it is tagged by whoever wrote the profile.
+ *
+ * `data` (ADR-061) exists here mainly so `criteria.tracks`
+ * (`z.record(ProfileTrackSchema, ...)`, completeness-enforced) has
+ * something to be complete *over* — no `profile.yaml` competency needs the
+ * tag yet, since data-analyst postings are a lower-priority track scored
+ * from title keywords alone (docs/04), not from any specific evidenced
+ * skill. A competency genuinely specific to data work could still be
+ * tagged this way later.
  */
-export const ProfileTrackSchema = z.enum(["dev", "security", "automation"]);
+export const ProfileTrackSchema = z.enum([
+  "dev",
+  "security",
+  "automation",
+  "data",
+]);
 export type ProfileTrack = z.infer<typeof ProfileTrackSchema>;
 
 /**

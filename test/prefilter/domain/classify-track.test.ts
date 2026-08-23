@@ -7,12 +7,14 @@ const tracks = {
   dev: ["backend", "back-end", "node"],
   security: ["segurança", "firewall"],
   automation: ["automação", "devops"],
+  data: [],
 };
 
 const trackWeights: TrackWeights = {
   dev: 1.0,
   security: 1.0,
   automation: 0.7,
+  data: 0.7,
   unknown: 0.4,
 };
 
@@ -85,6 +87,7 @@ describe("classifyTrack — degree-name and database phrasing (B10)", () => {
     ],
     security: ["segurança"],
     automation: ["automação"],
+    data: [],
   };
 
   it("classifies a CS/SI/networking catch-all degree list as dev", () => {
@@ -117,6 +120,7 @@ describe("classifyTrack — AI/data phrasing and English 'IT' (B13 follow-up)", 
     dev: ["ia", "inteligência artificial"],
     security: [],
     automation: ["ti", "it"],
+    data: [],
   };
 
   it("classifies bare 'IA' as dev", () => {
@@ -154,11 +158,13 @@ describe("classifyTrack — exclusions veto a keyword match", () => {
     dev: ["desenvolvimento", "backend"],
     security: ["segurança"],
     automation: ["devops"],
+    data: [],
   };
   const exclusions = {
     dev: ["desenvolvimento de embalagens"],
     security: ["segurança do trabalho"],
     automation: [],
+    data: [],
   };
 
   it("rejects packaging development despite the 'desenvolvimento' keyword", () => {
@@ -205,7 +211,12 @@ describe("classifyTrack — exclusions veto a keyword match", () => {
 // already but a real title's wording did not literally match it — a
 // reversed word order and a joining "e" lost to "&" normalization.
 describe("classifyTrack — exclusion phrasing variants found in real postings", () => {
-  const tracks = { dev: ["desenvolvimento"], security: [], automation: [] };
+  const tracks = {
+    dev: ["desenvolvimento"],
+    security: [],
+    automation: [],
+    data: [],
+  };
   const exclusions = {
     dev: [
       "pesquisa e desenvolvimento",
@@ -214,6 +225,7 @@ describe("classifyTrack — exclusion phrasing variants found in real postings",
     ],
     security: [],
     automation: [],
+    data: [],
   };
 
   it("rejects a cosmetics R&D internship whose '&' loses the joining 'e'", () => {
@@ -248,6 +260,7 @@ describe("classifyTrack — Indeed vocabulary gaps (B13 follow-up)", () => {
     dev: ["ia", "inteligência artificial"],
     security: [],
     automation: ["ti", "it"],
+    data: [],
   };
 
   it("classifies English 'IT' as automation — different letters from Portuguese 'ti'", () => {
@@ -278,12 +291,56 @@ describe("classifyTrack — Indeed vocabulary gaps (B13 follow-up)", () => {
     // name ("... Equipamentos de Energia Elétrica e Tecnologia") is not
     // evidence the posting itself is tech, the same shape B8 fixed once for
     // "(Humano Desenvolvimento)".
-    const noTecnologia = { dev: [], security: [], automation: [] };
+    const noTecnologia = { dev: [], security: [], automation: [], data: [] };
     expect(
       classifyTrack(
         "ESTAGIÁRIO NA ÁREA DE ENGENHARIA ELÉTRICA - Centro - Sem experiência (CET Brazil Equipamentos de Energia Elétrica e Tecnologia)",
         noTecnologia,
       ),
     ).toEqual([]);
+  });
+});
+
+/**
+ * ADR-061. A lower-priority track of its own, weight 0.7 like `automation`
+ * — CLAUDE.md §1's search profile names only back-end, security and
+ * infrastructure/automation, not data analysis. Every keyword and the one
+ * exclusion below were measured against the real production corpus, the
+ * same discipline B10/B13 used.
+ */
+describe("classifyTrack — data track (ADR-061)", () => {
+  const tracks = {
+    dev: [],
+    security: [],
+    automation: [],
+    data: ["análise de dados", "pessoa estagiária de dados"],
+  };
+  const exclusions = {
+    dev: [],
+    security: [],
+    automation: [],
+    data: ["suporte e atendimento ao cliente"],
+  };
+
+  it("classifies a genuine data-analysis internship as data", () => {
+    expect(
+      classifyTrack("ESTÁGIO EM ANÁLISE DE DADOS (Esportes Olímpicos)", tracks),
+    ).toEqual(["data"]);
+  });
+
+  it("rejects a customer-support role despite matching the data keyword's own opening words (real B15/ADR-061 false positive)", () => {
+    expect(
+      classifyTrack(
+        "PESSOA ESTAGIÁRIA DE DADOS PARA SUPORTE E ATENDIMENTO AO CLIENTE",
+        tracks,
+        exclusions,
+      ),
+    ).toEqual([]);
+  });
+
+  it("still classifies the genuine data posting once the exclusion is present", () => {
+    expect(
+      classifyTrack("Pessoa Estagiária de Dados", tracks, exclusions),
+    ).toEqual(["data"]);
   });
 });

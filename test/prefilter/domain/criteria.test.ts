@@ -12,8 +12,15 @@ function validCriteria() {
       dev: ["backend", "node"],
       security: ["segurança", "firewall"],
       automation: ["automação", "devops"],
+      data: ["análise de dados"],
     },
-    trackWeights: { dev: 1.0, security: 1.0, automation: 0.7, unknown: 0.4 },
+    trackWeights: {
+      dev: 1.0,
+      security: 1.0,
+      automation: 0.7,
+      data: 0.7,
+      unknown: 0.4,
+    },
     scoring: {
       weights: { mandatory: 65, desirable: 20, trackAlignment: 15 },
       thresholds: { apply: 70, review: 45 },
@@ -277,6 +284,7 @@ describe("CriteriaSchema", () => {
           dev: 1.5,
           security: 1.0,
           automation: 0.7,
+          data: 0.7,
           unknown: 0.4,
         },
       };

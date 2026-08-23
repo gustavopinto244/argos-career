@@ -1102,8 +1102,8 @@ function deliverCriteria(): Criteria {
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
     maxFutureSkewDays: 1,
-    tracks: { dev: ["backend"], security: [], automation: [] },
-    trackExclusions: { dev: [], security: [], automation: [] },
+    tracks: { dev: ["backend"], security: [], automation: [], data: [] },
+    trackExclusions: { dev: [], security: [], automation: [], data: [] },
     rejectUnknownTrack: false,
     schedule: {
       collection: { intervalHours: 4 },
@@ -1114,7 +1114,13 @@ function deliverCriteria(): Criteria {
       scoreFailureRateThreshold: 0.5,
       sourceFreshnessHours: {},
     },
-    trackWeights: { dev: 1.0, security: 1.0, automation: 0.7, unknown: 0.4 },
+    trackWeights: {
+      dev: 1.0,
+      security: 1.0,
+      automation: 0.7,
+      data: 0.7,
+      unknown: 0.4,
+    },
     scoring: {
       weights: { mandatory: 65, desirable: 20, trackAlignment: 15 },
       thresholds: { apply: 70, review: 45 },
