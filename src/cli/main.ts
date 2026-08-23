@@ -552,12 +552,20 @@ function describeUnnormalizablePayload(
 ): Readonly<Record<string, unknown>> {
   const hasSourceId =
     typeof raw.sourceId === "string" && raw.sourceId.trim().length > 0;
-  const payload = raw.payload;
+  // `payloadOf`, not `raw.payload`: this must describe what was actually
+  // handed to the normalizer, or it misreports the exact case it exists to
+  // explain — a flat item would record `payloadType: "undefined"` and no
+  // keys at all, which is precisely the shape B15 needed named.
+  const payload = payloadOf(raw);
+  // Recorded so the two shapes stay distinguishable in the event row even
+  // though both now normalize (B15's audit correction).
+  const envelopeShape = raw.payload === undefined ? "flat" : "wrapped";
   if (payload === null || typeof payload !== "object") {
-    return { hasSourceId, payloadType: typeof payload };
+    return { hasSourceId, envelopeShape, payloadType: typeof payload };
   }
   return {
     hasSourceId,
+    envelopeShape,
     payloadType: "object",
     payloadKeys: Object.keys(payload as Record<string, unknown>).sort(),
   };
