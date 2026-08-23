@@ -451,6 +451,40 @@ records both probes and the correction.
 > resolves itself later (a plan change, a fixed endpoint) without this
 > being revisited deliberately.
 
+> **Re-measured, 2026-08-23 — the mechanism is now understood, and the
+> parked status is confirmed for a sharper reason than "unknown."** The
+> original finding ("byte-identical 403 for a real and a fake key") was
+> re-verified first — still true, same 4631-byte page — but probing
+> further than the original session did revealed the block is
+> **content-triggered, not key-triggered**, and its severity depends on
+> **which machine asks**:
+>
+> - **From a residential/office IP**, a request with an empty or absent
+>   search body (`{}`, `{"keywords":""}`) reaches Jooble's real
+>   application — a genuine `400`, `<title>ErrorMessage</title>`, "Sorry,
+>   the server could not process your request." Any request carrying an
+>   actual, non-empty `keywords` or `location` value — real key or fake,
+>   doesn't matter — gets the same static `403 Error 403` page as before.
+>   Systematically varied the body (7 combinations) to confirm: presence
+>   of real search criteria is what flips the response, nothing else.
+> - **From Atlas** — the only machine that would ever run this collector —
+>   **every** request, including the empty one that reached the app from
+>   elsewhere, returns `403` with `cf-mitigated: challenge` and
+>   `<title>Just a moment...</title>`: Cloudflare's own interactive bot
+>   challenge, not an application response at all. Confirmed twice, not a
+>   fluke.
+>
+> **This closes the investigation with a decisive answer, even though the
+> outcome (parked) does not change.** Solving an interactive Cloudflare
+> challenge requires running real browser JavaScript against it —
+> functionally the same fingerprint-evasion category CLAUDE.md §6 already
+> forbids and B14 already declined for Catho ("stealth plugins or
+> fingerprint spoofing... the arms-race option is closed by project rule,
+> not just by preference"). Atlas's IP is what matters, and Atlas's IP is
+> unconditionally challenge-gated regardless of key, query, or method.
+> `scripts/fixture-jooble.ts`'s own doc comment is updated with this
+> measurement so a future session does not have to re-derive it.
+
 ---
 
 ## B5 — Three hot-path inefficiencies, measured against a corpus that hasn't grown into them yet
