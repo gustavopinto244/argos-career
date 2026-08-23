@@ -509,6 +509,34 @@ export interface IngestExternalOutcome {
 }
 
 /**
+ * The item's `payload`, or — when the caller sent no `payload` key at all —
+ * the item itself.
+ *
+ * `ExternalRawPosting`'s documented shape is `{ sourceId, payload }`, and
+ * `collectors/indeed/collect.py` sends exactly that. n8n (ADR-029) is not
+ * this repository's code, and `docs/11-known-issues.md` B15 could not
+ * establish from the stored evidence which shape it actually sends: every
+ * rejected LinkedIn item recorded `source_id` as **null**, not `""`, which
+ * rules out an envelope carrying an empty `sourceId` but leaves two
+ * possibilities equally supported — an envelope with a `payload` and no
+ * `sourceId`, or a flat item with neither.
+ *
+ * B15's fix addressed the first. This addresses the second, so the
+ * LinkedIn path works whichever is true rather than depending on a
+ * hypothesis that could not be confirmed. Purely additive: a caller that
+ * does send `payload` is completely unaffected, so Indeed's behaviour is
+ * unchanged.
+ *
+ * The `payloadKeys` diagnostic below is what will finally say which shape
+ * n8n really sends, on the next real delivery — at which point this
+ * fallback can be kept as tolerance or removed as dead, deliberately,
+ * with evidence.
+ */
+function payloadOf(raw: ExternalRawPosting): unknown {
+  return raw.payload === undefined ? raw : raw.payload;
+}
+
+/**
  * Content-free structural summary of a rejected external-ingest item —
  * field *names*, never values (docs/08-observability.md's boundary around
  * log lines applies equally to event metadata). Added after
@@ -524,12 +552,20 @@ function describeUnnormalizablePayload(
 ): Readonly<Record<string, unknown>> {
   const hasSourceId =
     typeof raw.sourceId === "string" && raw.sourceId.trim().length > 0;
-  const payload = raw.payload;
+  // `payloadOf`, not `raw.payload`: this must describe what was actually
+  // handed to the normalizer, or it misreports the exact case it exists to
+  // explain — a flat item would record `payloadType: "undefined"` and no
+  // keys at all, which is precisely the shape B15 needed named.
+  const payload = payloadOf(raw);
+  // Recorded so the two shapes stay distinguishable in the event row even
+  // though both now normalize (B15's audit correction).
+  const envelopeShape = raw.payload === undefined ? "flat" : "wrapped";
   if (payload === null || typeof payload !== "object") {
-    return { hasSourceId, payloadType: typeof payload };
+    return { hasSourceId, envelopeShape, payloadType: typeof payload };
   }
   return {
     hasSourceId,
+    envelopeShape,
     payloadType: "object",
     payloadKeys: Object.keys(payload as Record<string, unknown>).sort(),
   };
@@ -598,7 +634,7 @@ export async function executeIngestExternal(
     }[] = [];
     for (const raw of postings) {
       const posting = normalize(
-        { source, sourceId: raw.sourceId, payload: raw.payload },
+        { source, sourceId: raw.sourceId, payload: payloadOf(raw) },
         collectedAt,
       );
       if (!posting) {

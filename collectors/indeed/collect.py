@@ -185,11 +185,30 @@ def main() -> None:
     all_rows: list[dict] = []
     seen_ids: set[str] = set()
     any_truncated = False
+    failed_terms: list[str] = []
     per_term_rows: dict[str, list[dict]] = {}
     for index, term in enumerate(search_terms):
         if index > 0:
             time.sleep(TERM_INTERVAL_SECONDS)
-        rows, truncated = scrape_term(term, location, country_indeed, results_wanted)
+        # One term failing must not discard the terms that already
+        # succeeded. Before this guard existed, a single `scrape_jobs`
+        # raising (a network blip, Indeed rate-limiting one query, a parse
+        # error inside jobspy) propagated straight out of `main` and
+        # nothing was ingested at all -- proven with a stubbed jobspy:
+        # two terms returned real rows, the third raised, and the ingest
+        # POST never happened. That is the same "a broken source degrades,
+        # it does not take everything down" rule (principle 1,
+        # docs/02-architecture.md) the Node collectors follow, applied
+        # within a single multi-term run.
+        try:
+            rows, truncated = scrape_term(
+                term, location, country_indeed, results_wanted
+            )
+        except Exception as cause:  # noqa: BLE001 - deliberately broad
+            print(f"WARNING: term '{term}' failed, continuing: {cause}")
+            failed_terms.append(term)
+            per_term_rows[term] = []
+            continue
         any_truncated = any_truncated or truncated
         per_term_rows[term] = rows
         for row in rows:
@@ -207,6 +226,14 @@ def main() -> None:
         f"jobspy: {len(all_rows)} unique rows across {len(search_terms)} "
         f"term(s) ({', '.join(search_terms)})"
     )
+    if failed_terms:
+        # Loud, but not fatal: the run still ingests whatever succeeded.
+        # Visible in `journalctl --user -u argos-indeed-collect`, which is
+        # where B13 says to look when this source goes quiet.
+        print(
+            f"WARNING: {len(failed_terms)} of {len(search_terms)} term(s) "
+            f"failed and contributed nothing: {', '.join(failed_terms)}"
+        )
 
     if dry_run:
         output_path = env("DRY_RUN_OUTPUT", "/app/output/dry-run.json")
@@ -217,6 +244,16 @@ def main() -> None:
             )
         print(f"DRY_RUN: wrote {len(all_rows)} rows to {output_path}, not ingesting")
         return
+
+    if failed_terms and len(failed_terms) == len(search_terms):
+        # Every term failed: this is a broken run, not a quiet one, and it
+        # must exit non-zero so systemd records a failure. Exiting 0 here
+        # would make a fully-broken collector indistinguishable from a
+        # source with nothing new to offer -- the exact blind spot
+        # docs/11-known-issues.md B13 documents (six silent days).
+        raise SystemExit(
+            f"ERROR: all {len(search_terms)} search term(s) failed; nothing collected"
+        )
 
     if len(all_rows) == 0:
         print("nothing to ingest, exiting")

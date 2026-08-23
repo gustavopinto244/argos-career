@@ -226,6 +226,93 @@ describe("InfoJobsCollector — listing + detail fetch", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("tags postings from the remote facet with isRemoteQuery, and others not", async () => {
+    // The collector is the only layer that knows which listing facet was
+    // queried; the detail page's JSON-LD states no remote signal at all.
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = url.toString();
+      if (href.includes("vagas-de-emprego")) {
+        return htmlResponse(
+          listingHtml(listingCard("111", "/vaga-de-a__111.aspx")),
+        );
+      }
+      return htmlResponse(
+        detailHtml(jobPosting("Estágio de TI", "Empresa Fictícia")),
+      );
+    });
+
+    const remote = await new InfoJobsCollector({
+      fetchImpl,
+      ...FAST_OPTIONS,
+    }).collect({ jobName: "estagio ti", isRemoteWork: true });
+    expect(
+      (remote.postings[0]?.payload as { isRemoteQuery: boolean }).isRemoteQuery,
+    ).toBe(true);
+
+    const byCity = await new InfoJobsCollector({
+      fetchImpl,
+      ...FAST_OPTIONS,
+    }).collect({ jobName: "estagio ti", city: "Rio de Janeiro" });
+    expect(
+      (byCity.postings[0]?.payload as { isRemoteQuery: boolean }).isRemoteQuery,
+    ).toBe(false);
+  });
+
+  it("picks the JobPosting block, not merely the first application/ld+json script", async () => {
+    // Job sites commonly render BreadcrumbList/Organization blocks before
+    // the posting one. Taking the first block worked against every page
+    // sampled during discovery and would break silently the day that
+    // changed -- every posting rejected, source looking empty rather than
+    // broken (the docs/11 B13 failure shape).
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = url.toString();
+      if (href.includes("vagas-de-emprego")) {
+        return htmlResponse(
+          listingHtml(listingCard("111", "/vaga-de-a__111.aspx")),
+        );
+      }
+      const breadcrumb = `<script type="application/ld+json">${JSON.stringify({
+        "@context": "http://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [],
+      })}</script>`;
+      const posting = `<script type="application/ld+json">${JSON.stringify(
+        jobPosting("Estágio de TI", "Empresa Fictícia"),
+      )}</script>`;
+      return htmlResponse(`<html><head>${breadcrumb}${posting}</head></html>`);
+    });
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    const result = await collector.collect({ jobName: "estagio ti" });
+
+    expect(result.postings).toHaveLength(1);
+    expect((result.postings[0]?.payload as { title: string }).title).toBe(
+      "Estágio de TI",
+    );
+  });
+
+  it("counts a detail page whose only ld+json block is not a JobPosting as unnormalizable", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = url.toString();
+      if (href.includes("vagas-de-emprego")) {
+        return htmlResponse(
+          listingHtml(listingCard("111", "/vaga-de-a__111.aspx")),
+        );
+      }
+      return htmlResponse(
+        `<html><head><script type="application/ld+json">${JSON.stringify({
+          "@type": "BreadcrumbList",
+        })}</script></head></html>`,
+      );
+    });
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    const result = await collector.collect({ jobName: "estagio ti" });
+
+    expect(result.postings).toEqual([]);
+    expect(result.schemaRejectedCount).toBe(1);
+  });
+
   it("returns an empty, non-truncated result when the listing has no cards", async () => {
     const fetchImpl = vi.fn(async () => htmlResponse(listingHtml("")));
     const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
