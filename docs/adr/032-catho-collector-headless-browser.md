@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+**Parked, 2026-08-23** — accepted and built, never deployed, and now
+superseded in practice by measurement. See
+[Amendment 1](#amendment-1--2026-08-23-parked-on-measurement-not-on-the-block).
 
 ## Date
 
@@ -166,3 +168,40 @@ partially-drained backlog (the seen-IDs state file) means either keeping
 stale progress or discarding it and re-walking — a cost `collectors/catho/README.md`'s
 "Resetting the backlog" section names explicitly rather than leaving
 implicit.
+
+## Amendment 1 — 2026-08-23: parked on measurement, not on the block
+
+Asked to deploy this collector, the block was re-tested rather than trusted:
+still **403, 2 of 2**, and a plain `curl` with the honest User-Agent gets 403
+too — so this is not the headless-fingerprint problem the pre-deploy audit
+diagnosed. Catho blocks every non-interactive client on vaga pages.
+
+Two alternatives were then measured (details and numbers in
+`docs/11-known-issues.md` B14): **Google Jobs via `python-jobspy`** returned
+0 rows across three query shapes while Indeed through the same image
+returned 50; and a **sitemap-only** strategy — Catho's sitemaps are not
+blocked — yields roughly **180 RJ-identifiable internships out of ~250,000
+URLs**, single digits of them on-track, and **no description at all**, so
+nothing arriving that way could reach Stage A.
+
+**The important correction is to this ADR's own premise, and it does not
+depend on the block.** This ADR accepted that Catho "has no server-side
+search this project can reach, so every title-matched posting has to be
+opened once to learn its real city" — and treated that as a cost worth
+paying. Measured, that cost is ~8,000 page loads to surface single-digit
+relevant postings. This project rejects far better ratios elsewhere:
+ADR-018 dropped query terms that returned volume with zero on-track
+results, and ADR-011's own city-query gap was accepted on exactly this
+kind of arithmetic. The trade was never justified; the block only made an
+already-bad one impossible.
+
+Beating the block would require stealth plugins or fingerprint spoofing —
+the evasion CLAUDE.md §6 forbids by name — so that option is closed by rule,
+not preference.
+
+**Parked, on the Jooble precedent (`docs/11` B4):** the code, the
+checkpoint state machine (ADR-033/045) and the SSRF allowlist (ADR-044)
+stay on disk, correct and tested, costing nothing while dormant. What stops
+is pretending this is a source that might arrive soon. Revisit only if
+Catho publishes a usable API, or if a measurement shows the RJ internship
+volume there is materially larger than ~180 and reachable without evasion.

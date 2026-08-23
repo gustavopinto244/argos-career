@@ -1466,6 +1466,56 @@ never contributed a single posting.
 collector that drives a real browser, it is the heaviest thing this project
 would run on Atlas, and standing it up is a deployment decision with a
 resource cost — not a bug fix to slip into a session about calibration.
-Deciding it needs an explicit call: deploy it, or mark it dormant and stop
-carrying four ADRs' worth of maintenance surface for a source that returns
-nothing.
+
+> **Asked to deploy it, 2026-08-23 — re-tested first, and the answer is
+> still no.** The 2026-08-17 audit's block was re-verified rather than
+> trusted: the image was rebuilt on Atlas and the same default
+> `chromium.launch()` `collect.ts` uses was pointed at real vaga URLs.
+> **403, 2 of 2, zero `ld+json`.** A plain `curl` with the honest User-Agent
+> gets **403** too, so this is not a headless-browser fingerprint problem
+> as the audit assumed — Catho blocks _every_ non-interactive client on
+> vaga pages. The probe image (3.48 GB) and its directory were removed from
+> Atlas afterwards.
+
+> **Two alternative collection strategies were measured, not theorised, and
+> both fail — 2026-08-23.**
+>
+> **1. Google Jobs via `python-jobspy`.** The obvious reuse: CLAUDE.md §6
+> already sanctions "Google Jobs / Indeed via an ephemeral Python
+> container", the container already exists and works (B13), and Catho
+> publishes `JobPosting` structured data that Google indexes. Ran it three
+> ways (`google_search_term` phrased for Google Jobs, a plain Portuguese
+> query, and bare `search_term`): **0 rows every time.** Indeed through the
+> same image returns 50. The Google path is simply not producing results
+> from this host.
+>
+> **2. Sitemap-only, no page fetch.** Catho's sitemaps are _not_ blocked
+> (HTTP 200, honest UA, plain HTTP), and slugs carry the job title, so
+> title filtering needs no browser at all. Measured across one real
+> sitemap file and extrapolated over all 5:
+>
+> |                                     | count             |
+> | ----------------------------------- | ----------------- |
+> | vaga URLs                           | ~250,000          |
+> | internship-titled                   | ~8,000            |
+> | RJ-identifiable **from the slug**   | **~180**          |
+> | of those, on-track for this profile | **single digits** |
+>
+> Location encoding is the killer: only 171 of ~50,000 slugs carry a `-rj`
+> suffix, and the rest express location as a neighbourhood
+> (`recreio-dos-bandeirantes`, `barra-da-tijuca`) or omit it. Worse, the
+> slug carries **no description**, so nothing that arrived this way could
+> reach Stage A at all — it would be an unscoreable title in the digest.
+
+**Recommendation: park it, like Jooble (B4).** Not because the code is bad —
+`state.ts`'s checkpointing is correct and tested — but because the
+arithmetic never justified it, block or no block. ADR-032's premise was that
+it is worth opening every title-matched posting once to learn its real city;
+that is ~8,000 page loads to find single-digit relevant postings, a ratio
+this project would reject from any other source. The block merely makes an
+already-bad trade impossible.
+
+Beating the block would mean stealth plugins or fingerprint spoofing, which
+is precisely the evasion CLAUDE.md §6 forbids ("never forged to imitate a
+browser") — so the arms-race option is closed by project rule, not just by
+preference. The effort is better spent on sources with an API.
