@@ -543,3 +543,29 @@ alerts:
   # above which the run itself is worth flagging as a possible model or
   # prompt regression.
   scoreFailureRateThreshold: 0.5
+  # How long each source may deliver nothing before that is an alert
+  # (docs/11-known-issues.md B13). This is the ONLY signal that can see a
+  # push-based external collector go silent: Indeed (ADR-027) never appears
+  # in a collect run's `attempted_sources`, so it contributed zero postings
+  # for six days while every run row, the empty-collection check and the
+  # missed-run alert all reported green -- the pulled sources really were
+  # healthy, and nothing was watching the pushed one.
+  #
+  # Windows are set from each source's real cadence with slack for one
+  # missed cycle, not from wishes:
+  #   gupy/ciee/solides  pulled every 4h by the scheduler (ADR-009), but
+  #                      volume is lumpy -- solides legitimately went ~2
+  #                      days without a new posting while healthy -- so 72h
+  #                      flags a dead collector without crying over a quiet
+  #                      weekend.
+  #   indeed             its own systemd timer runs twice daily; 36h is a
+  #                      little over one missed run.
+  #
+  # `catho` is deliberately absent: it has never been deployed (B14), and
+  # listing it would alert every cycle about a decision nobody has made yet.
+  # An unlisted source is simply not checked.
+  sourceFreshnessHours:
+    gupy: 72
+    ciee: 72
+    solides: 72
+    indeed: 36

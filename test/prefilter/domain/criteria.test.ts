@@ -153,6 +153,10 @@ describe("CriteriaSchema", () => {
       expect(result.alerts).toEqual({
         consecutiveEmptyCollectionRuns: 2,
         scoreFailureRateThreshold: 0.5,
+        // Empty, not absent: an unlisted source is deliberately not checked
+        // for freshness (docs/11-known-issues.md B13), so the safe default
+        // is "watch nothing until someone says what fresh means".
+        sourceFreshnessHours: {},
       });
     });
 
@@ -167,7 +171,28 @@ describe("CriteriaSchema", () => {
       expect(result.alerts).toEqual({
         consecutiveEmptyCollectionRuns: 3,
         scoreFailureRateThreshold: 0.25,
+        sourceFreshnessHours: {},
       });
+    });
+
+    it("accepts per-source freshness windows (docs/11-known-issues.md B13)", () => {
+      const result = CriteriaSchema.parse({
+        ...validCriteria(),
+        alerts: { sourceFreshnessHours: { indeed: 36, gupy: 72 } },
+      });
+      expect(result.alerts.sourceFreshnessHours).toEqual({
+        indeed: 36,
+        gupy: 72,
+      });
+    });
+
+    it("rejects a non-positive freshness window", () => {
+      expect(() =>
+        CriteriaSchema.parse({
+          ...validCriteria(),
+          alerts: { sourceFreshnessHours: { indeed: 0 } },
+        }),
+      ).toThrow();
     });
 
     it("rejects a scoreFailureRateThreshold outside [0, 1]", () => {

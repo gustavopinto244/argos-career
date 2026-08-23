@@ -357,10 +357,33 @@ export const CriteriaSchema = z.object({
     .object({
       consecutiveEmptyCollectionRuns: z.number().int().positive().default(2),
       scoreFailureRateThreshold: z.number().min(0).max(1).default(0.5),
+      /**
+       * Per-source freshness, in hours: how long a source may go without a
+       * single posting being seen before that counts as a failure
+       * (docs/11-known-issues.md B13).
+       *
+       * This exists because every other health signal is blind to it. A
+       * push-based external collector (ADR-027 — Indeed, Catho, LinkedIn)
+       * never appears in `runs.attempted_sources`, so a `collect` run says
+       * `success` whether that source delivered everything or nothing at
+       * all. Indeed went six days contributing zero postings while every
+       * run row, `evaluateCollectionHealth` and the missed-run alert
+       * reported green, because the pulled sources really were healthy.
+       *
+       * Keyed by source with no default entries: a source only gets a
+       * freshness expectation once someone states what "fresh" means for
+       * it, and an unlisted source is simply not checked. That keeps a new
+       * or deliberately dormant collector from alerting before anyone has
+       * decided how often it should deliver.
+       */
+      sourceFreshnessHours: z
+        .record(z.string(), z.number().positive())
+        .default({}),
     })
     .default({
       consecutiveEmptyCollectionRuns: 2,
       scoreFailureRateThreshold: 0.5,
+      sourceFreshnessHours: {},
     }),
 });
 

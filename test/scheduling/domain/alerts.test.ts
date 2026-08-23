@@ -4,6 +4,7 @@ import {
   evaluateCollectionHealth,
   evaluateDeliveryOutcome,
   evaluateMissedRuns,
+  evaluateSourceFreshness,
   MissedRunConfig,
 } from "../../../src/scheduling/domain/alerts";
 
@@ -263,5 +264,76 @@ describe("evaluateMissedRuns", () => {
     });
     const alerts = evaluateMissedRuns(now, lastDeliver, null, config);
     expect(alerts.some((a) => a.text.includes("collection run"))).toBe(true);
+  });
+});
+
+describe("evaluateSourceFreshness (docs/11-known-issues.md B13)", () => {
+  const NOW = new Date("2026-08-22T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000);
+
+  it("is silent when every configured source is within its window", () => {
+    expect(
+      evaluateSourceFreshness(
+        NOW,
+        { gupy: hoursAgo(3), indeed: hoursAgo(10) },
+        { gupy: 72, indeed: 36 },
+      ),
+    ).toEqual([]);
+  });
+
+  it("alerts on the real B13 scenario: a pushed source silent for days while pulled ones are fine", () => {
+    // Indeed's systemd timer had never fired; gupy/ciee kept succeeding, so
+    // every run-log-based check reported green. This is the signal that
+    // would have caught it.
+    const alerts = evaluateSourceFreshness(
+      NOW,
+      { gupy: hoursAgo(2), ciee: hoursAgo(1), indeed: hoursAgo(144) },
+      { gupy: 72, ciee: 72, indeed: 36 },
+    );
+
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.text).toContain('"indeed"');
+    expect(alerts[0]?.text).toContain("144h");
+    expect(alerts[0]?.text).toContain("36h");
+  });
+
+  it("distinguishes a source that has NEVER delivered from one that went stale", () => {
+    // "never" is a deployment problem (B14's Catho), "stale" an operational
+    // one (B13's Indeed) — an operator sent to the wrong one wastes the
+    // trip.
+    const [neverAlert] = evaluateSourceFreshness(NOW, {}, { catho: 36 });
+    expect(neverAlert?.text).toContain("never delivered");
+    expect(neverAlert?.text).toContain("not deployed");
+
+    const [staleAlert] = evaluateSourceFreshness(
+      NOW,
+      { indeed: hoursAgo(100) },
+      { indeed: 36 },
+    );
+    expect(staleAlert?.text).toContain("delivered nothing for");
+    expect(staleAlert?.text).not.toContain("never delivered");
+  });
+
+  it("does not check a source with no configured expectation", () => {
+    // An unlisted source is dormant-by-choice, not broken — listing every
+    // known source would alert forever about decisions nobody has made.
+    expect(
+      evaluateSourceFreshness(
+        NOW,
+        { catho: hoursAgo(9999), gupy: hoursAgo(1) },
+        { gupy: 72 },
+      ),
+    ).toEqual([]);
+  });
+
+  it("reports every stale source, in a stable order", () => {
+    const alerts = evaluateSourceFreshness(
+      NOW,
+      { indeed: hoursAgo(200), gupy: hoursAgo(200) },
+      { indeed: 36, gupy: 72 },
+    );
+    expect(alerts).toHaveLength(2);
+    expect(alerts[0]?.text).toContain('"gupy"');
+    expect(alerts[1]?.text).toContain('"indeed"');
   });
 });

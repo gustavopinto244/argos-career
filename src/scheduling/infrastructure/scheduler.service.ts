@@ -8,6 +8,7 @@ import {
   Db,
   runMigrations,
 } from "../../persistence/infrastructure/db";
+import { PostingsRepository } from "../../persistence/infrastructure/postings-repository";
 import { RunsRepository } from "../../persistence/infrastructure/runs-repository";
 import { collectorFor } from "../../posting/infrastructure/collector-registry";
 import { Criteria } from "../../prefilter/domain/criteria";
@@ -23,6 +24,7 @@ import {
   evaluateCollectionHealth,
   evaluateDeliveryOutcome,
   evaluateMissedRuns,
+  evaluateSourceFreshness,
 } from "../domain/alerts";
 import { RunLock, runExclusive } from "../domain/run-lock";
 import { RUN_LOCK } from "./run-lock.provider";
@@ -299,7 +301,16 @@ export class SchedulerService implements OnModuleInit {
       this.criteria.schedule,
     );
 
-    return [...collectionAlerts, ...missedRunAlerts];
+    // Reads the corpus, not `runs` — the only signal here that can see a
+    // push-based external collector going silent (docs/11-known-issues.md
+    // B13). Every check above would report green through exactly that.
+    const freshnessAlerts = evaluateSourceFreshness(
+      new Date(),
+      new PostingsRepository(this.db).findLastSeenAtBySource(),
+      this.criteria.alerts.sourceFreshnessHours,
+    );
+
+    return [...collectionAlerts, ...missedRunAlerts, ...freshnessAlerts];
   }
 
   private async sendAlerts(alerts: readonly Alert[]): Promise<void> {

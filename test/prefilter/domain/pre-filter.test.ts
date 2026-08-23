@@ -39,6 +39,7 @@ function baseCriteria(overrides: Partial<Criteria> = {}): Criteria {
     alerts: {
       consecutiveEmptyCollectionRuns: 2,
       scoreFailureRateThreshold: 0.5,
+      sourceFreshnessHours: {},
     },
     trackWeights: { dev: 1.0, security: 1.0, automation: 0.7, unknown: 0.4 },
     scoring: {
