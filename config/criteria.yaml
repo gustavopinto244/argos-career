@@ -327,6 +327,26 @@ tracks:
     - sistemas de informação
     - ciência da computação
     - redes de computadores
+    # Added 2026-08-23 (docs/11-known-issues.md B13's follow-up), measured
+    # against the full 2,768-posting corpus with the same probe discipline:
+    # whole-word, on-track, no false positives sampled.
+    #   ia / inteligência artificial   1 + 2 matches, all on-track (V3A —
+    #     "Estagiário(a) em Dados e IA"; Magnetis — "Estágio em Inteligência
+    #     Artificial"; Instituto Infnet — "...Dados e Inteligência
+    #     Artificial"). "ia" is a short token but whole-word matching found
+    #     zero substring bleed into "Fisioterapia", "Farmácia" or similar
+    #     across the whole corpus -- the same check that ruled bare "dados"
+    #     in/out for B10.
+    #
+    # Deliberately NOT added: bare "tecnologia". Measured 8 matches, but 6
+    # already classify via the existing "tecnologia da informação" phrase --
+    # the only genuine gain was "FGV - ESTÁGIO - TECNOLOGIA" against one real
+    # false positive, "ESTAGIÁRIO NA ÁREA DE ENGENHARIA ELÉTRICA... (CET
+    # Brazil Equipamentos de Energia Elétrica e Tecnologia)", where the word
+    # appears only in the company's own name, not the job content -- the
+    # same shape B8 already fixed once for "(Humano Desenvolvimento)".
+    - ia
+    - inteligência artificial
   security:
     - segurança
     - security
@@ -374,6 +394,11 @@ tracks:
     # support, hospital/logistics/education "operações") -- exactly the
     # false-positive risk ADR-011's whole-phrase discipline exists to avoid.
     - suporte e operações
+    # Added 2026-08-23 (docs/11-known-issues.md B13's follow-up). English
+    # "IT" -- different letters from Portuguese "ti" just above, so it never
+    # matched via that entry. 1 match, on-track (HMH -- "IT Support Intern"),
+    # measured against the full corpus with zero false positives.
+    - it
 
 # Phrases that veto a track even when one of its keywords matched (ADR-015).
 # Every entry below was observed as a real false positive in the collected

@@ -1492,6 +1492,29 @@ Indeed for 'estagio ti'` → `50 rows returned` → the real pre-filter run
 > `INGEST_INDEED_API_KEY`, a deliberate act with its own value to manage —
 > flagged here rather than done silently mid-session.
 
+> **Two more track keywords, 2026-08-23 — real Indeed candidates still
+> stuck at `track_unknown` after the `SEARCH_TERM` fix.** Read the fresh
+> corpus by hand rather than assume the search-term fix alone closed the
+> gap: 100 of 124 active Indeed postings (81%) still classified `unknown`
+> by title, and two were genuinely on-track — "IT Support Intern" (HMH) and
+> "Estagiário(a) em Dados e IA" (V3A). Measured before adding anything, same
+> discipline as B10: `"ia"`/`"inteligência artificial"` — 1 + 2 matches
+> across the full corpus, all on-track, no substring bleed into
+> "Fisioterapia" or similar; `"it"` — 1 match, on-track. Both added
+> (`dev` for AI/data, `automation` alongside the existing `"ti"` — English
+> "IT" is spelled with different letters, so it never matched that entry).
+>
+> **Deliberately not added: bare `"tecnologia"`.** Measured 8 matches, but 6
+> already classified via the existing `"tecnologia da informação"` phrase.
+> The one genuine gain ("FGV - ESTÁGIO - TECNOLOGIA") came with one real
+> false positive — "ESTAGIÁRIO NA ÁREA DE ENGENHARIA ELÉTRICA... (CET
+> Brazil Equipamentos de Energia Elétrica e Tecnologia)", where the word
+> lives only in the company's own name, the exact shape B8 already fixed
+> once. Not a clean addition, so not made.
+>
+> Verified against the real corpus: pre-filter passes for Indeed went
+> **7 → 9** (of 115 unclaimed candidates), total corpus-wide **10**.
+
 ---
 
 ## B14 — The Catho collector was never deployed at all
