@@ -114,16 +114,17 @@ accumulated in the corpus). Expanding to 50 happens the same way, not on
 demand — tracked in [`docs/10-milestones.md`](docs/10-milestones.md),
 re-run from here whenever that happens.
 
-| #   | Configuration                                                                                                                             | n   | Scored | Parse-failure | Correlation           | Verdict recall (apply / review / discard)                                                                          | Cost                                      |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------- | --- | ------ | ------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| 1   | `openrouter/free` auto-router                                                                                                             | —   | —      | —             | n/a                   | Never produced a measurement — router swaps the underlying model every request, so "model" was never held constant |
-| 2   | Any `:free` OpenRouter model                                                                                                              | —   | —      | —             | n/a                   | Never produced a measurement — shared 50 req/day cap, one posting's match calls alone exceed it                    |
-| 3   | `qwen3:4b` via `OllamaScorer`, local                                                                                                      | 16  | 2      | 88%           | n/a (too little data) | 0% / n/a / 0%                                                                                                      | not recorded (usage tracking added later) |
-| 4   | `deepseek-v4-flash-0731` via `ApiScorer`, `b-v2` prompt — **inputs later found broken** (see below)                                       | 16  | 16     | 0%            | -0.097                | not recorded per-verdict — the aggregate correlation is what triggered the audit below                             | not recorded (usage tracking added later) |
-| 5   | Same as #4, **after** the description backfill, `verifiable`-exclusion and `trackExclusions` fixes                                        | 16  | 16     | 0%            | **0.522**             | 0% / 0% / 100% (64% precision)                                                                                     | $0.0326                                   |
-| 6   | Same as #5, **after** completing the profile's declared fields (English, availability) — worst-5-deviation subset only, not a full re-run | 5   | 5      | 0%            | **0.835**             | 20% / n/a / n/a (100% precision)                                                                                   | $0.0059                                   |
-| 7   | `a-v4`/`b-v4`, worksheet grown to 18 — baseline before [ADR-055](docs/adr/055-stage-a-v5-track-conditional-requirements.md)               | 18  | 13     | 28%           | 0.357                 | 40% / 0% / 80% (apply 100% precision)                                                                              | $0.0305                                   |
-| 8   | `a-v5`/`b-v4`, **only** the Stage A prompt changed from #7 (ADR-055 — merges track-conditional requirement branches)                      | 18  | 18     | 0%            | **0.468**             | 25% / 0% / 86% (apply 100% precision)                                                                              | $0.0272                                   |
+| #   | Configuration                                                                                                                                                                                                   | n   | Scored | Parse-failure | Correlation           | Verdict recall (apply / review / discard)                                                                          | Cost                                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------ | ------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| 1   | `openrouter/free` auto-router                                                                                                                                                                                   | —   | —      | —             | n/a                   | Never produced a measurement — router swaps the underlying model every request, so "model" was never held constant |
+| 2   | Any `:free` OpenRouter model                                                                                                                                                                                    | —   | —      | —             | n/a                   | Never produced a measurement — shared 50 req/day cap, one posting's match calls alone exceed it                    |
+| 3   | `qwen3:4b` via `OllamaScorer`, local                                                                                                                                                                            | 16  | 2      | 88%           | n/a (too little data) | 0% / n/a / 0%                                                                                                      | not recorded (usage tracking added later) |
+| 4   | `deepseek-v4-flash-0731` via `ApiScorer`, `b-v2` prompt — **inputs later found broken** (see below)                                                                                                             | 16  | 16     | 0%            | -0.097                | not recorded per-verdict — the aggregate correlation is what triggered the audit below                             | not recorded (usage tracking added later) |
+| 5   | Same as #4, **after** the description backfill, `verifiable`-exclusion and `trackExclusions` fixes                                                                                                              | 16  | 16     | 0%            | **0.522**             | 0% / 0% / 100% (64% precision)                                                                                     | $0.0326                                   |
+| 6   | Same as #5, **after** completing the profile's declared fields (English, availability) — worst-5-deviation subset only, not a full re-run                                                                       | 5   | 5      | 0%            | **0.835**             | 20% / n/a / n/a (100% precision)                                                                                   | $0.0059                                   |
+| 7   | `a-v4`/`b-v4`, worksheet grown to 18 — baseline before [ADR-055](docs/adr/055-stage-a-v5-track-conditional-requirements.md)                                                                                     | 18  | 13     | 28%           | 0.357                 | 40% / 0% / 80% (apply 100% precision)                                                                              | $0.0305                                   |
+| 8   | `a-v5`/`b-v4`, **only** the Stage A prompt changed from #7 (ADR-055 — merges track-conditional requirement branches)                                                                                            | 18  | 18     | 0%            | **0.468**             | 25% / 0% / 86% (apply 100% precision)                                                                              | $0.0272                                   |
+| 9   | Same prompts as #8, **after** four scoring fixes: broken provider excluded (ADR-056), category-named and work-mode evidence admitted (ADR-057/058), score's track derived from extracted requirements (ADR-059) | 18  | 18     | 0%            | **0.621**             | 38% / 0% / 71% (apply 100% precision)                                                                              | $0.0000 (cached — see below)              |
 
 **Configurations #1–#3 lost for infrastructure reasons, not model quality** —
 worth keeping because the fix (`OllamaScorer` as a fixed local model,
@@ -189,10 +190,34 @@ requirement branches into one alternative requirement under `a-v5`, on
 every one of the runs where the extraction was cold — see ADR-055 for the
 before/after data pulled straight from the database.
 
+**#8 → #9** is four fixes measured together, not one at a time — stated
+plainly rather than dressed up as a clean single-variable run. Three were
+bugs with no judgement attached: a provider returning empty content
+([ADR-056](docs/adr/056-exclude-broken-openrouter-providers.md)), and two
+kinds of real profile evidence the applicability guard rejected outright
+([ADR-057](docs/adr/057-generic-skill-category-evidence.md),
+[ADR-058](docs/adr/058-work-availability-evidence-vocabulary.md) — the latter
+made a declared profile field unusable for _every_ requirement from the day
+it was added). The fourth is a real scoring-model change
+([ADR-059](docs/adr/059-score-track-from-extracted-requirements.md)):
+`trackAlignment` now falls back to Stage A's extracted requirements when the
+title classifies nothing, which is 86% of this corpus.
+
+`trackAlignment` is not part of any cache key, so #9 was computed from cached
+Stage A/B output — no new model calls, hence $0. That makes it an exact
+measurement of the track change and a stale one for anything needing the
+model re-asked.
+
+**`apply` recall is the number that matters here** (`docs/04`: "a missed good
+posting costs more than a reviewed bad one"): 25% → 38%, with `apply`
+precision holding at 100%. `discard` recall fell 86% → 71% as the mirror
+image — raising alignment raises scores — while `discard` precision rose.
+That is the trade this project says it wants.
+
 A scoring system that has never been measured against ground truth is a number
-generator. This one now has two real single-variable measurements, four
-documented structural fixes derived from auditing it, and a known amount of
-data still missing before the next number means more than this one does.
+generator. This one now has three real measurements, eight documented
+structural fixes derived from auditing it, and a known amount of data still
+missing before the next number means more than this one does.
 
 ## Stack
 

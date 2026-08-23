@@ -13,7 +13,10 @@ import { MatchesRepository } from "../../../src/persistence/infrastructure/match
 import { PostingsRepository } from "../../../src/persistence/infrastructure/postings-repository";
 import { Criteria } from "../../../src/prefilter/domain/criteria";
 import { Profile } from "../../../src/profile/domain/profile";
-import { ApiScorer } from "../../../src/scoring/infrastructure/api-scorer";
+import {
+  ApiScorer,
+  resolveScoringTracks,
+} from "../../../src/scoring/infrastructure/api-scorer";
 import { LlmTransportError } from "../../../src/scoring/infrastructure/openrouter-client";
 import { StageAExtractor } from "../../../src/scoring/infrastructure/stage-a-extractor";
 import { StageBMatcher } from "../../../src/scoring/infrastructure/stage-b-matcher";
@@ -279,5 +282,80 @@ describe("ApiScorer.score", () => {
       expect(result.lowConfidence).toBe(true);
       expect(result.verdict).not.toBe("apply");
     }
+  });
+});
+
+describe("resolveScoringTracks (ADR-059)", () => {
+  const trackCriteria = {
+    tracks: {
+      dev: ["backend", "programação"],
+      security: ["segurança"],
+      automation: ["devops"],
+    },
+    trackExclusions: {
+      dev: ["desenvolvimento humano"],
+      security: [],
+      automation: [],
+    },
+  } as unknown as Criteria;
+
+  function req(text: string) {
+    return {
+      text,
+      category: "technical_skill",
+      weight: "mandatory" as const,
+      verifiable: true,
+    };
+  }
+
+  it("leaves a title-classified posting completely untouched", () => {
+    // The safety property: this change must not be able to alter the score
+    // of any posting that was already classifying correctly.
+    expect(
+      resolveScoringTracks(
+        ["dev"],
+        [req("Conhecimento em segurança da informação e devops")],
+        trackCriteria,
+      ),
+    ).toEqual(["dev"]);
+  });
+
+  it("falls back to extracted requirements when the title classifies nothing", () => {
+    // The real B9 case: "Programa de Estágio Smarthis | 2026" names no
+    // technology, while its requirements plainly do.
+    expect(
+      resolveScoringTracks(
+        [],
+        [
+          req("Estar cursando graduação"),
+          req("Conhecimento em pelo menos uma linguagem de programação"),
+        ],
+        trackCriteria,
+      ),
+    ).toEqual(["dev"]);
+  });
+
+  it("stays unknown when neither the title nor the requirements classify", () => {
+    expect(
+      resolveScoringTracks(
+        [],
+        [req("Boa comunicação interpessoal")],
+        trackCriteria,
+      ),
+    ).toEqual([]);
+  });
+
+  it("stays unknown when there are no requirements at all", () => {
+    expect(resolveScoringTracks([], [], trackCriteria)).toEqual([]);
+  });
+
+  it("still honours trackExclusions against the joined requirement text", () => {
+    expect(
+      resolveScoringTracks(
+        [],
+        [req("Estágio em desenvolvimento humano e programação")],
+        trackCriteria,
+      ),
+    ).toEqual([]);
   });
 });
