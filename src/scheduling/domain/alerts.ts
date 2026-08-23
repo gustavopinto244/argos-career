@@ -207,3 +207,52 @@ export function evaluateMissedRuns(
 
   return alerts;
 }
+
+/**
+ * Per-source freshness (docs/11-known-issues.md B13).
+ *
+ * Every other signal in this file reads `runs` — which is exactly why none
+ * of them could see the failure this one exists for. A push-based external
+ * collector (ADR-027) never appears in a `collect` run's
+ * `attempted_sources`, so its silence is indistinguishable from success:
+ * Indeed contributed nothing for six days while every run row said
+ * `success`, because the pulled sources were genuinely fine.
+ *
+ * So this reads the **corpus** instead of the run log — the newest
+ * `lastSeenAt` per source is the one fact that is true regardless of how a
+ * posting arrived, pulled or pushed.
+ *
+ * A source with no configured expectation is not checked at all, and a
+ * source that has never delivered anything (`null`) alerts with different
+ * wording from one that has gone quiet — "never" is a deployment problem
+ * (B14's Catho), "stale" is an operational one (B13's Indeed), and telling
+ * an operator the wrong one sends them to the wrong place.
+ */
+export function evaluateSourceFreshness(
+  now: Date,
+  lastSeenBySource: Readonly<Record<string, Date | null>>,
+  expectedHoursBySource: Readonly<Record<string, number>>,
+): Alert[] {
+  const alerts: Alert[] = [];
+  for (const source of Object.keys(expectedHoursBySource).sort()) {
+    const expectedHours = expectedHoursBySource[source];
+    if (expectedHours === undefined) continue;
+    const lastSeen = lastSeenBySource[source] ?? null;
+
+    if (lastSeen === null) {
+      alerts.push({
+        text: `Source "${source}" has never delivered a posting, but a freshness window of ${expectedHours}h is configured for it — it is probably not deployed.`,
+      });
+      continue;
+    }
+
+    const staleForMs = now.getTime() - lastSeen.getTime();
+    if (staleForMs > expectedHours * 60 * 60 * 1000) {
+      const staleForHours = Math.floor(staleForMs / (60 * 60 * 1000));
+      alerts.push({
+        text: `Source "${source}" has delivered nothing for ${staleForHours}h (expected at least every ${expectedHours}h) — last posting seen ${lastSeen.toISOString()}.`,
+      });
+    }
+  }
+  return alerts;
+}

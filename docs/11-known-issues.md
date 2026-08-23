@@ -1420,10 +1420,26 @@ Push-based external collectors (ADR-027) never appear in a `collect` run's
 attempted list, so every health signal this project has — the run rows,
 `evaluateCollectionHealth`, the missed-run alert — reported green for six
 days while a source contributed nothing. The corpus looked healthy because
-CIEE and Gupy _were_ healthy. **A source that stops pushing is currently
-indistinguishable from a source that has nothing to push**, and closing that
-needs a per-source freshness check (`MAX(last_seen_at)` per source against an
-expected cadence), which is not built here.
+CIEE and Gupy _were_ healthy. A source that stopped pushing was
+indistinguishable from a source with nothing to push.
+
+> **Detection built, 2026-08-22.** `evaluateSourceFreshness`
+> (`scheduling/domain/alerts.ts`) reads the **corpus** rather than `runs` —
+> via `PostingsRepository.findLastSeenAtBySource()` — because a posting's
+> `lastSeenAt` is true regardless of how it arrived, which is exactly the
+> property every run-log-based check lacks. Wired into the collection
+> cycle's existing alert sweep and configured per source in
+> `criteria.alerts.sourceFreshnessHours` (gupy/ciee/solides 72h, indeed
+> 36h), each window set from that source's real cadence with slack for one
+> missed run. A source with no configured window is not checked, so a
+> dormant collector cannot alert about a decision nobody has made yet.
+>
+> Verified against this incident's own recorded numbers: fed the observed
+> pre-fix state it emits `Source "indeed" has delivered nothing for 150h
+(expected at least every 36h)`; fed the post-fix state it is silent. A
+> source that has _never_ delivered gets different wording from one that
+> went stale — "never" is a deployment problem (B14), "stale" an operational
+> one, and sending an operator to the wrong one wastes the trip.
 
 **Also unfixed:** 6 of the 50 rows came back `unnormalizable`. Not
 investigated — noted so the number is not mistaken for noise later.

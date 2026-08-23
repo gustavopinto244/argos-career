@@ -199,6 +199,38 @@ export class PostingsRepository {
     return { posting: rowToPosting(stored), wasNew: !existing };
   }
 
+  /**
+   * Newest `lastSeenAt` per source, over active postings — the input to the
+   * per-source freshness alert (docs/11-known-issues.md B13).
+   *
+   * Reads the corpus rather than `runs` deliberately: a push-based external
+   * collector (ADR-027) never appears in a run's `attempted_sources`, so the
+   * run log cannot distinguish "delivered nothing" from "was never asked".
+   * A posting's `lastSeenAt` is true regardless of how it arrived.
+   *
+   * Discarded postings are excluded for the same reason every other read
+   * here excludes them — a manually discarded posting is not evidence the
+   * source is alive today.
+   */
+  findLastSeenAtBySource(): Record<string, Date> {
+    const rows = this.db
+      .select({
+        source: postings.source,
+        latest: sql<number>`MAX(${postings.lastSeenAt})`,
+      })
+      .from(postings)
+      .where(isNull(postings.discardedAt))
+      .groupBy(postings.source)
+      .all();
+
+    const result: Record<string, Date> = {};
+    for (const row of rows) {
+      if (row.latest === null) continue;
+      result[row.source] = new Date(row.latest);
+    }
+    return result;
+  }
+
   findByFingerprint(fingerprint: string): Posting | null {
     const row = this.db
       .select()
