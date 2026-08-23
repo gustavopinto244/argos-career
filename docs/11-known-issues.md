@@ -1448,7 +1448,9 @@ investigated — noted so the number is not mistaken for noise later.
 
 ## B14 — The Catho collector was never deployed at all
 
-**Status:** open · **Found:** 2026-08-22, the same collector audit
+**Status:** parked (ADR-032 Amendment 1) — re-tested 2026-08-23, still
+blocked, and the arithmetic does not justify it even unblocked ·
+**Found:** 2026-08-22, the same collector audit
 
 Catho has **zero postings in the corpus, ever**. Unlike B13 this is not a
 broken deployment — there is no deployment: no systemd unit installed
