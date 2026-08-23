@@ -1035,12 +1035,32 @@ applicable=false`, and was so for _every_ requirement that could ever
 > `trackAlignment` 1.0, no cap, and **88.4 → `apply`**, against a hand label
 > of 100.
 >
-> **Not implemented here, deliberately.** The pre-filter's track must stay
-> title-based — it gates spending and runs before any LLM call — so this
-> would split one classifier into two uses: a cheap title-based gate, and a
-> richer requirement-based signal for the _score_. That is a scoring-model
-> change (`docs/04`), and the M7 protocol requires it be calibrated as its
-> own single variable rather than bundled here.
+> **Implemented, 2026-08-22 (ADR-059).** `resolveScoringTracks` falls back
+> to the extracted requirements only when the title classifies nothing, so a
+> posting that already classified is left completely alone — the pre-filter's
+> title-based spend gate is untouched. Calibrated as its own variable
+> (`trackAlignment` is not in any cache key, so a cached run measures it
+> exactly, at zero cost): **correlation 0.468 → 0.621, `apply` recall
+> 25% → 38%**, with `apply` precision holding at 100%. `discard` recall fell
+> 86% → 71% as the mirror image, while `discard` precision rose — the trade
+> `docs/04` explicitly asks for.
+>
+> Verified end to end on the worked example with a cold run (14 real calls,
+> $0.00117): **50.00 `review` → 88.33 `apply`**, against a hand label of 100.
+
+> **Status of B9 as of 2026-08-22.** Of the six original misses, five now
+> have a named cause and a measured fix — period gate (ADR-053),
+> CS-fundamentals evidence (profile data), extraction shape (ADR-055),
+> category-named evidence (ADR-057), work availability (ADR-058) — plus the
+> track signal above (ADR-059). The one genuinely still open is
+> **ELDORADO**, and it is not a defect: Angular and Java/Spring Boot are
+> honestly absent from the profile, confirmed with the profile owner.
+>
+> This entry's headline number (`apply` recall 13-17%) has since moved to
+> **38%** on a worksheet re-measured twice. **B9 stays open only as the
+> tracking entry for `apply` recall itself**, which is still short of where
+> the M7 protocol wants it and needs the worksheet closer to 50 postings
+> before the next correction is worth trusting against noise.
 
 > **`workAvailability` profile field added, 2026-08-19.** Closes the
 > Smarthis work-mode gap above: `profile.ts` gained a fourth declared
