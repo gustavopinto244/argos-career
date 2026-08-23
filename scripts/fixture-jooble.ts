@@ -32,12 +32,26 @@
  * application evaluating the key — nothing behind that 403 has looked at it.
  * The absence of `cf-mitigated` distinguishes less than it appeared to.
  *
- * So the shape of the block is still unknown, and this script cannot capture
- * a fixture until it is. `docs/11-known-issues.md` tracks it; the next step
- * is opening https://jooble.org/api/about in a logged-in browser to confirm
- * the key is active and to read the request format that page actually
- * documents. Forging a browser User-Agent to get past this is not on the
- * table (CLAUDE.md §6).
+ * **Re-measured 2026-08-23 — the mechanism is understood now.** The block
+ * is content-triggered, not key-triggered, and its severity depends on
+ * which machine asks:
+ *
+ *   - From a residential/office IP, an EMPTY search body (`{}`,
+ *     `{"keywords":""}`) reaches the real app: a genuine `400`,
+ *     `<title>ErrorMessage</title>`. Any request with a real, non-empty
+ *     `keywords`/`location` value gets the same static `403` page,
+ *     key or no key.
+ *   - From Atlas — the only machine that would ever run this — EVERY
+ *     request, including the empty one, gets `cf-mitigated: challenge` and
+ *     `<title>Just a moment...</title>`: Cloudflare's interactive bot
+ *     challenge, not an application response.
+ *
+ * Solving that challenge means running real browser JS against it —
+ * the same fingerprint-evasion category CLAUDE.md §6 forbids and B14
+ * already declined for Catho. Full measurement in
+ * `docs/11-known-issues.md` B4's 2026-08-23 follow-up. This script still
+ * cannot capture a fixture, and now that is a closed, understood
+ * conclusion, not an open question.
  *
  * `robots.txt` disallows `/employer/api` and says nothing about `/api`.
  *
