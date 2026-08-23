@@ -86,6 +86,19 @@ export interface ComposeDigestInput {
 }
 
 /**
+ * Highest score first within each section, so the digest reads
+ * best-match-first instead of in whatever order `executeDeliver` happened
+ * to process postings in (claim order, not a compatibility signal). Ties
+ * keep their relative input order — `Array.prototype.sort` is
+ * stable — rather than an arbitrary secondary key, since nothing about
+ * this project's scoring model claims a meaningful ordering between two
+ * postings that landed on the exact same score.
+ */
+function byScoreDescending(a: ScoredPosting, b: ScoredPosting): number {
+  return b.outcome.score - a.outcome.score;
+}
+
+/**
  * Buckets scored postings into `recommended` (`apply`) and `review`
  * (`review`) by their verdict. `discard` postings are dropped here — they are
  * still in the corpus (never deleted, ADR-007), just not in the digest.
@@ -98,6 +111,8 @@ export function composeDigest(input: ComposeDigestInput): Digest {
     if (entry.outcome.verdict === "apply") recommended.push(entry);
     else if (entry.outcome.verdict === "review") review.push(entry);
   }
+  recommended.sort(byScoreDescending);
+  review.sort(byScoreDescending);
 
   return {
     runId: input.runId,
