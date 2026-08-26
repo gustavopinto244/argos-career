@@ -16,6 +16,8 @@ import {
   deliverCronExpression,
   SchedulerService,
 } from "../../../src/scheduling/infrastructure/scheduler.service";
+import { PendingAlertsRepository } from "../../../src/persistence/infrastructure/pending-alerts-repository";
+import { createDatabase } from "../../../src/persistence/infrastructure/db";
 
 describe("collectionCronExpression", () => {
   it("fires at minute 0 of every Nth hour", () => {
@@ -145,6 +147,101 @@ resumeVariants:
     expect(
       backups.some((f) => f.startsWith("argos-") && f.endsWith(".db")),
     ).toBe(true);
+
+    const registry = moduleRef.get(
+      (await import("@nestjs/schedule")).SchedulerRegistry,
+    );
+    for (const job of registry.getCronJobs().values()) job.stop();
+    await moduleRef.close();
+  });
+
+  it("queues an undeliverable alert and redelivers it on the next cycle (ADR-067)", async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [SchedulingModule],
+    }).compile();
+    await moduleRef.init();
+    const service = moduleRef.get(SchedulerService);
+    const internals = service as unknown as {
+      notifier: { sendText: (text: string) => Promise<unknown> };
+      sendAlerts: (alerts: readonly { text: string }[]) => Promise<void>;
+    };
+
+    // docs/11 B20: alerting shares the digest's channel, so when Telegram is
+    // what broke, the alert about it goes out over the broken channel.
+    const sent: string[] = [];
+    internals.notifier = {
+      sendText: () =>
+        Promise.resolve({
+          ok: false,
+          error: { message: "Telegram request failed" },
+        }),
+    };
+    await internals.sendAlerts([{ text: "No digest sent today." }]);
+
+    const queue = new PendingAlertsRepository(
+      createDatabase(process.env.DATABASE_PATH!),
+    );
+    expect(queue.count()).toBe(1);
+
+    // Next cycle, channel back, nothing new to report — draining is exactly
+    // what an otherwise-quiet cycle is for.
+    internals.notifier = {
+      sendText: (text: string) => {
+        sent.push(text);
+        return Promise.resolve({ ok: true });
+      },
+    };
+    await internals.sendAlerts([]);
+
+    expect(queue.count()).toBe(0);
+    expect(sent).toHaveLength(1);
+    // A late alert must announce that it is late, or it reads as a fresh
+    // problem hours after the fact.
+    expect(sent[0]).toContain("delayed alert");
+    expect(sent[0]).toContain("No digest sent today.");
+
+    const registry = moduleRef.get(
+      (await import("@nestjs/schedule")).SchedulerRegistry,
+    );
+    for (const job of registry.getCronJobs().values()) job.stop();
+    await moduleRef.close();
+  });
+
+  it("stops redelivering at the first failure and keeps the rest queued (ADR-067)", async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [SchedulingModule],
+    }).compile();
+    await moduleRef.init();
+    const service = moduleRef.get(SchedulerService);
+    const internals = service as unknown as {
+      notifier: { sendText: (text: string) => Promise<unknown> };
+      sendAlerts: (alerts: readonly { text: string }[]) => Promise<void>;
+    };
+
+    internals.notifier = {
+      sendText: () =>
+        Promise.resolve({ ok: false, error: { message: "still down" } }),
+    };
+    await internals.sendAlerts([{ text: "alert one" }, { text: "alert two" }]);
+
+    const queue = new PendingAlertsRepository(
+      createDatabase(process.env.DATABASE_PATH!),
+    );
+    expect(queue.count()).toBe(2);
+
+    // Channel still down on the next cycle: one attempt, then stop — the
+    // rest would fail identically while holding up the cycle.
+    let attempts = 0;
+    internals.notifier = {
+      sendText: () => {
+        attempts += 1;
+        return Promise.resolve({ ok: false, error: { message: "still down" } });
+      },
+    };
+    await internals.sendAlerts([]);
+
+    expect(attempts).toBe(1);
+    expect(queue.count()).toBe(2);
 
     const registry = moduleRef.get(
       (await import("@nestjs/schedule")).SchedulerRegistry,

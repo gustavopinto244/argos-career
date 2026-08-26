@@ -18,6 +18,7 @@ import { loadProfile } from "../../profile/infrastructure/profile-loader";
 import { buildScorer } from "../../scoring/infrastructure/build-scorer";
 import { TelegramNotifier } from "../../delivery/infrastructure/telegram-notifier";
 import { DeliveryOperationsRepository } from "../../persistence/infrastructure/delivery-operations-repository";
+import { PendingAlertsRepository } from "../../persistence/infrastructure/pending-alerts-repository";
 import { loadTelegramConfig } from "../../delivery/infrastructure/telegram-config";
 import {
   Alert,
@@ -70,6 +71,7 @@ export class SchedulerService implements OnModuleInit {
   private criteria!: Criteria;
   private profile!: Profile;
   private notifier!: TelegramNotifier;
+  private pendingAlerts!: PendingAlertsRepository;
 
   // Explicit @Inject rather than relying on reflected constructor-parameter
   // metadata: `npm run dev` runs this under `tsx` (esbuild), whose
@@ -100,6 +102,7 @@ export class SchedulerService implements OnModuleInit {
     this.notifier = new TelegramNotifier(loadTelegramConfig(), fetch, {
       deliveryStore: new DeliveryOperationsRepository(this.db),
     });
+    this.pendingAlerts = new PendingAlertsRepository(this.db);
 
     const { collection, scoreAndDeliver } = this.criteria.schedule;
 
@@ -313,14 +316,88 @@ export class SchedulerService implements OnModuleInit {
     return [...collectionAlerts, ...missedRunAlerts, ...freshnessAlerts];
   }
 
+  /**
+   * Sends alerts, and — before them — anything an earlier cycle could not
+   * deliver (ADR-067).
+   *
+   * Alerting shares the digest's Telegram channel on purpose (docs/08: a
+   * second channel is infrastructure nobody maintains). The gap that leaves
+   * is that when Telegram is what broke, the alert *about* it goes out over
+   * the broken channel and survives only as a journald line. `docs/11` B20
+   * is that gap costing a real digest.
+   *
+   * This closes it without adding a channel, by moving the alert in time
+   * instead: a failed send is queued and redelivered on the next cycle that
+   * succeeds. Late, but not lost.
+   *
+   * Called on every collection cycle, including when there is nothing new to
+   * report — draining is the whole point, and a cycle with no alerts is
+   * exactly when a backlog is most likely to be waiting.
+   */
   private async sendAlerts(alerts: readonly Alert[]): Promise<void> {
+    await this.redeliverQueuedAlerts();
     for (const alert of alerts) {
       const result = await this.notifier.sendText(alert.text);
       if (!result.ok) {
         this.logger.error(
           `Failed to send alert: ${alert.text} (${result.error.message})`,
         );
+        this.pendingAlerts.queue(alert.text, new Date(), result.error.message);
       }
     }
   }
+
+  /**
+   * Re-sends queued alerts, oldest first, stopping at the first failure.
+   *
+   * Stopping early rather than trying each in turn: if the send failed, the
+   * channel is still down, and the remaining attempts would fail the same
+   * way while holding up the cycle. They stay queued for the next one.
+   *
+   * The redelivered text says when the alert was first raised, and how many
+   * times the condition recurred while it could not be sent — without that,
+   * an alert arriving hours late reads as a fresh problem, which is its own
+   * kind of wrong.
+   */
+  private async redeliverQueuedAlerts(): Promise<void> {
+    const queued = this.pendingAlerts.list(MAX_ALERT_REDELIVERIES_PER_CYCLE);
+    if (queued.length === 0) return;
+
+    for (const alert of queued) {
+      const result = await this.notifier.sendText(formatQueuedAlert(alert));
+      if (!result.ok) {
+        this.logger.warn(
+          `Alert redelivery still failing, ${this.pendingAlerts.count()} queued (${result.error.message})`,
+        );
+        return;
+      }
+      this.pendingAlerts.remove(alert.id);
+    }
+
+    const remaining = this.pendingAlerts.count();
+    if (remaining > 0) {
+      this.logger.log(
+        `Redelivered ${queued.length} queued alert(s); ${remaining} still queued.`,
+      );
+    }
+  }
+}
+
+/** Bounds a single recovery cycle. Telegram rate-limits per chat (docs/11
+ * B3), so a long outage must not turn the first successful cycle into a
+ * flood; the remainder drains on later cycles. */
+const MAX_ALERT_REDELIVERIES_PER_CYCLE = 5;
+
+/** Marks a late alert as late. An alert that reads as current when it
+ * describes a condition from hours ago is misleading in a way the original
+ * text cannot fix on its own. */
+function formatQueuedAlert(alert: {
+  readonly text: string;
+  readonly firstQueuedAt: Date;
+  readonly occurrences: number;
+}): string {
+  const raised = alert.firstQueuedAt.toISOString();
+  const repeated =
+    alert.occurrences > 1 ? `, seen ${alert.occurrences}x since` : "";
+  return `[delayed alert — first raised ${raised}${repeated}]\n${alert.text}`;
 }

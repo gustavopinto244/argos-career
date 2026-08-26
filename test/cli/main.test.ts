@@ -1966,7 +1966,12 @@ describe("executeDeliver", () => {
     expect(outcome.error).toBe("Telegram unreachable");
 
     const runsRepo = new RunsRepository(db);
-    expect(runsRepo.findById(outcome.runId)?.outcome).toBe("failed");
+    const run = runsRepo.findById(outcome.runId);
+    expect(run?.outcome).toBe("failed");
+    // ADR-067 / docs/11 B20: the row must say *what* failed. This exact
+    // shape — outcome `failed`, reason null — is why the 2026-08-25
+    // delivery failure was read as an LLM problem for a day.
+    expect(run?.failureReason).toBe("Telegram unreachable");
 
     const postingsRepo = new PostingsRepository(db);
     expect(postingsRepo.findUnnotified()).toHaveLength(1);

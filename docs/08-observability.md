@@ -100,6 +100,13 @@ source/query with received/schema/business rejection, normalization, age,
 new/already-seen, truncation and failure fields. A `null` upstream count means
 the source could not report it; it is never silently converted into zero.
 
+**A run that ends `failed` names what failed** (ADR-067). Every path that
+closes a run as failed writes `failure_reason`; a row saying `failed` with a
+null reason is a bug, not a run whose cause was unknowable. `docs/11` B20 is
+what that costs — an `outcome: failed, failure_reason: null` delivery failure
+was read as an LLM problem for a day, because the logs at that moment were
+full of unrelated model timeouts.
+
 Scoring runs persist attempts, outcomes, outcomes split by Stage A/B,
 provider/error-type counts, score-failure counts, prompt/completion/cached token
 totals, circuit-breaker refusals, provider-reported cost and attempts without
@@ -144,6 +151,22 @@ the direct, non-checkpointed path.
 
 Delivered through the same Telegram notifier as the digest. A separate alerting
 channel for a personal project would be infrastructure nobody maintains.
+
+**An alert whose send fails is queued, not dropped** (ADR-067). The hole in
+sharing one channel is specific: when Telegram is what broke, the alert about
+it goes out over the broken channel, and its only trace is a `logger.error`
+line — which is how `docs/11` B20 went unreported for a day. Rather than add a
+second channel, a failed alert is held in `pending_alerts` and redelivered on
+the next cycle whose send succeeds, prefixed with when it was first raised and
+how often the condition recurred. Deduped on the alert text, oldest first,
+capped per cycle against Telegram's per-chat rate limit, and drained on every
+collection cycle — including quiet ones, which is when a backlog is most
+likely to be waiting.
+
+This makes a transient failure self-healing within one collection cycle. It
+does **not** make alerting reliable: if the channel stays down, the alert
+still never arrives. That remains an accepted limitation, for the same reason
+the second channel is.
 
 | Condition                                                                  | Why it matters                                  | Action                               |
 | -------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------ |

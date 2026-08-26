@@ -432,6 +432,47 @@ export const deliveryOperations = sqliteTable(
   ],
 );
 
+/**
+ * Alerts that could not be delivered, held until the channel comes back
+ * (ADR-067).
+ *
+ * Alerting runs over the same Telegram notifier as the digest, deliberately
+ * — `docs/08-observability.md` rejects a second channel as "infrastructure
+ * nobody maintains", and that reasoning still holds. The gap it leaves is
+ * narrow and real: when Telegram itself is what failed, the alert *about*
+ * that failure goes out over the channel that just broke, and its only trace
+ * is a `logger.error` line in journald that nobody reads casually. That is
+ * exactly what happened on 2026-08-25 (docs/11 B20) — the digest never
+ * arrived and nothing said so.
+ *
+ * Queueing keeps the single-channel decision and closes the gap by moving
+ * the alert in time rather than in space: it is redelivered on the next
+ * cycle whose send succeeds, late but not lost.
+ *
+ * `text` is unique, and that is the dedup mechanism, not an accident. The
+ * conditions that alert here are level-triggered — "source X has delivered
+ * nothing", "no scoreAndDeliver run today" — so a channel that is down for a
+ * day would otherwise queue the same sentence six times over. One row with
+ * `occurrences` counts them instead.
+ */
+export const pendingAlerts = sqliteTable(
+  "pending_alerts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    text: text("text").notNull(),
+    firstQueuedAt: integer("first_queued_at", {
+      mode: "timestamp_ms",
+    }).notNull(),
+    lastQueuedAt: integer("last_queued_at", { mode: "timestamp_ms" }).notNull(),
+    // How many times this same alert was raised while the channel was down.
+    occurrences: integer("occurrences").notNull().default(1),
+    // Why the send failed, most recently. Observability only — the redelivery
+    // path does not branch on it.
+    lastError: text("last_error"),
+  },
+  (table) => [uniqueIndex("pending_alerts_text_unique").on(table.text)],
+);
+
 /** One stable, ordered checkpoint per Telegram message. Confirmed chunks are
  * immutable and skipped on resume. */
 export const deliveryChunks = sqliteTable(
