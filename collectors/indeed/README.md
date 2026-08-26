@@ -116,6 +116,37 @@ bar every `criteria.yaml` query comment already documents: real volume that
 survives the pre-filter _and_ lands in the target metro area or remote, not
 a raw hit count.
 
+### The remote pass (ADR-070)
+
+`INCLUDE_REMOTE=1` runs a **second pass over the same terms**, asking
+Indeed's own remote facet instead of `LOCATION`. It is **off by default**.
+
+This collector has always been pinned to `LOCATION`, so a remote internship
+advertised nationally was unreachable regardless of which term ran — and
+remote is the highest-yield work mode measured on the real corpus
+(2026-08-26: 21.4% delivery against 1.4% for onsite).
+
+The cost is that a run makes twice as many requests: `RESULTS_WANTED` applies
+per pass rather than being split. Given ADR-028's deliberately narrow
+robots.txt exception, doubling traffic is a decision to make explicitly, not
+a new default.
+
+Measure it the same way as any term, before enabling it permanently:
+
+```bash
+docker run --rm -e DRY_RUN=1 -e INCLUDE_REMOTE=1 \
+  -v "$PWD/dry-run-output:/app/output" \
+  argos-indeed-collector:local
+
+npm run probe:indeed -- collectors/indeed/dry-run-output/dry-run.json
+```
+
+Each pass appears in `perTerm` under its own label — `estagio ti` and
+`estagio ti [remote]` are separate entries, because the same term run in two
+scopes is two different queries with two different yields. A failure in one
+pass is logged and skipped without affecting the others, exactly as a failed
+term already was.
+
 ## Discovery coverage gap (docs/audit AC-023) — mostly closed by ADR-060
 
 Originally: each scheduled run issued exactly **one** jobspy search, no

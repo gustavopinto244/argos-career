@@ -23,7 +23,8 @@ Required environment:
 
 Optional environment (defaults below):
   SEARCH_TERMS (comma-separated; SEARCH_TERM singular still accepted, see
-  below), LOCATION, COUNTRY_INDEED, RESULTS_WANTED, DRY_RUN, DRY_RUN_OUTPUT
+  below), LOCATION, COUNTRY_INDEED, RESULTS_WANTED, INCLUDE_REMOTE,
+  DRY_RUN, DRY_RUN_OUTPUT
 """
 
 import json
@@ -84,6 +85,21 @@ DEFAULT_LOCATION = "Rio de Janeiro, Brazil"
 DEFAULT_COUNTRY_INDEED = "Brazil"
 DEFAULT_RESULTS_WANTED = "50"
 
+# A second pass over the same terms asking Indeed's own remote facet
+# (ADR-070). Off by default: turning it on doubles the number of requests a
+# run makes, and ADR-028's robots.txt exception is scoped narrowly enough
+# that quietly doubling traffic is not something to enable for everyone.
+#
+# Why it is worth having at all: this collector has always been pinned to
+# `LOCATION`, so a remote internship advertised nationally was unreachable
+# no matter which term ran. Measured on the real corpus 2026-08-26, remote
+# postings deliver at 21.4% against 1.4% for onsite -- roughly 15x -- and
+# `country_indeed` stays "Brazil", so the pass stays national (ADR-068).
+#
+# `RESULTS_WANTED` is shared by both passes, so enabling this roughly
+# doubles a run's ceiling rather than splitting the existing budget.
+DEFAULT_INCLUDE_REMOTE = ""
+
 # Pause between terms within one run, same politeness discipline
 # `criteria.yaml`'s `collection.queryIntervalMs` applies to Gupy/Sólides
 # queries (CLAUDE.md §6) -- ADR-028's exception is scoped to the single
@@ -127,7 +143,11 @@ def resolve_search_terms() -> list[str]:
 
 
 def scrape_term(
-    term: str, location: str, country_indeed: str, results_wanted: int
+    term: str,
+    location: str,
+    country_indeed: str,
+    results_wanted: int,
+    is_remote: bool = False,
 ) -> tuple[list[dict], bool]:
     """One term, one `scrape_jobs` call. Returns the rows (already converted
     through `to_json`/`json.loads`, matching `main`'s previous single-term
@@ -135,14 +155,22 @@ def scrape_term(
     budget -- the same heuristic `main` used before multi-term existed,
     applied per term because jobspy gives no other signal
     (docs/audit PR-015).
+
+    `is_remote` asks Indeed's own remote facet rather than filtering rows
+    after the fact (ADR-070). It is the source's declaration, which is what
+    `indeed-normalizer.ts` reads off `is_remote` to set `workMode: "remote"`
+    -- the same "read what the source states, do not infer it from prose"
+    rule ADR-063 established for InfoJobs.
     """
-    print(f"jobspy: searching Indeed for '{term}' in '{location}' (up to {results_wanted})")
+    scope = "remote" if is_remote else location
+    print(f"jobspy: searching Indeed for '{term}' in '{scope}' (up to {results_wanted})")
     jobs = scrape_jobs(
         site_name=["indeed"],
         search_term=term,
         location=location,
         country_indeed=country_indeed,
         results_wanted=results_wanted,
+        is_remote=is_remote,
     )
     print(f"jobspy: {len(jobs)} rows returned for '{term}'")
     if len(jobs) == 0:
@@ -175,6 +203,11 @@ def main() -> None:
     # B13's follow-up already used for Gupy/Indeed). Neither
     # ARGOS_API_URL nor ARGOS_INGEST_API_KEY is required in this mode.
     dry_run = env("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+    include_remote = env("INCLUDE_REMOTE", DEFAULT_INCLUDE_REMOTE).strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     api_url = ""
     api_key = ""
@@ -187,7 +220,24 @@ def main() -> None:
     any_truncated = False
     failed_terms: list[str] = []
     per_term_rows: dict[str, list[dict]] = {}
-    for index, term in enumerate(search_terms):
+
+    # One pass per (term, scope). The location pass always runs; the remote
+    # pass is opt-in (ADR-070). Built as an explicit list rather than a
+    # nested loop so the politeness gap, the per-term failure guard and the
+    # cross-term dedup below all keep applying uniformly -- a remote pass
+    # must not get weaker guarantees than the location one.
+    #
+    # `label` distinguishes the two scopes in `per_term_rows`/`failed_terms`:
+    # the same term run locally and remotely are different queries with
+    # different yields, and collapsing them would make `probe:indeed`'s
+    # per-term output unreadable and hide which scope failed.
+    passes: list[tuple[str, bool, str]] = [
+        (term, False, term) for term in search_terms
+    ]
+    if include_remote:
+        passes += [(term, True, f"{term} [remote]") for term in search_terms]
+
+    for index, (term, is_remote, label) in enumerate(passes):
         if index > 0:
             time.sleep(TERM_INTERVAL_SECONDS)
         # One term failing must not discard the terms that already
@@ -202,15 +252,15 @@ def main() -> None:
         # within a single multi-term run.
         try:
             rows, truncated = scrape_term(
-                term, location, country_indeed, results_wanted
+                term, location, country_indeed, results_wanted, is_remote
             )
         except Exception as cause:  # noqa: BLE001 - deliberately broad
-            print(f"WARNING: term '{term}' failed, continuing: {cause}")
-            failed_terms.append(term)
-            per_term_rows[term] = []
+            print(f"WARNING: term '{label}' failed, continuing: {cause}")
+            failed_terms.append(label)
+            per_term_rows[label] = []
             continue
         any_truncated = any_truncated or truncated
-        per_term_rows[term] = rows
+        per_term_rows[label] = rows
         for row in rows:
             row_id = row.get("id")
             # Dedup across terms before ever building the postings list --
@@ -223,15 +273,17 @@ def main() -> None:
                 all_rows.append(row)
 
     print(
-        f"jobspy: {len(all_rows)} unique rows across {len(search_terms)} "
-        f"term(s) ({', '.join(search_terms)})"
+        f"jobspy: {len(all_rows)} unique rows across {len(passes)} "
+        f"pass(es) over {len(search_terms)} term(s) "
+        f"({', '.join(search_terms)})"
+        + (" + a remote pass" if include_remote else "")
     )
     if failed_terms:
         # Loud, but not fatal: the run still ingests whatever succeeded.
         # Visible in `journalctl --user -u argos-indeed-collect`, which is
         # where B13 says to look when this source goes quiet.
         print(
-            f"WARNING: {len(failed_terms)} of {len(search_terms)} term(s) "
+            f"WARNING: {len(failed_terms)} of {len(passes)} pass(es) "
             f"failed and contributed nothing: {', '.join(failed_terms)}"
         )
 
@@ -245,7 +297,7 @@ def main() -> None:
         print(f"DRY_RUN: wrote {len(all_rows)} rows to {output_path}, not ingesting")
         return
 
-    if failed_terms and len(failed_terms) == len(search_terms):
+    if failed_terms and len(failed_terms) == len(passes):
         # Every term failed: this is a broken run, not a quiet one, and it
         # must exit non-zero so systemd records a failure. Exiting 0 here
         # would make a fully-broken collector indistinguishable from a
