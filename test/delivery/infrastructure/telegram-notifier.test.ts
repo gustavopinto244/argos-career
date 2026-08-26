@@ -384,6 +384,93 @@ describe("TelegramNotifier — failure, never throws", () => {
     }
   });
 
+  it("retries a connection that never opened, then succeeds (ADR-065)", async () => {
+    // ECONNREFUSED proves nothing was delivered, so retrying cannot
+    // duplicate the digest. Before ADR-065 this returned on the first
+    // throw and left the chunk uncertain.
+    const refused = Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(new Error("connect ECONNREFUSED"), {
+        code: "ECONNREFUSED",
+      }),
+    });
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw refused;
+      return jsonResponse({ ok: true, result: { message_id: 7 } });
+    });
+    const notifier = new TelegramNotifier(CONFIG, fetchImpl, {
+      transportRetryBaseMs: 0,
+    });
+
+    const result = await notifier.notify(emptyDigest());
+
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  it("does not retry a timeout, which may already have been delivered (ADR-065)", async () => {
+    // The distinction the whole change rests on: an AbortError means the
+    // request may have arrived while the response was in flight. Retrying
+    // would send the digest twice.
+    const aborted = Object.assign(new Error("The operation was aborted"), {
+      name: "AbortError",
+    });
+    const fetchImpl = vi.fn(async () => {
+      throw aborted;
+    });
+    const notifier = new TelegramNotifier(CONFIG, fetchImpl, {
+      transportRetryBaseMs: 0,
+    });
+
+    const result = await notifier.notify(emptyDigest());
+
+    expect(result.ok).toBe(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a connection that broke mid-flight (ADR-065)", async () => {
+    // ECONNRESET is deliberately absent from NEVER_SENT_ERROR_CODES: the
+    // request may have been fully sent before the socket died.
+    const reset = Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(new Error("socket hang up"), {
+        code: "ECONNRESET",
+      }),
+    });
+    const fetchImpl = vi.fn(async () => {
+      throw reset;
+    });
+    const notifier = new TelegramNotifier(CONFIG, fetchImpl, {
+      transportRetryBaseMs: 0,
+    });
+
+    const result = await notifier.notify(emptyDigest());
+
+    expect(result.ok).toBe(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up after maxRetries on a connection that never opened", async () => {
+    const unresolved = Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(new Error("getaddrinfo ENOTFOUND"), {
+        code: "ENOTFOUND",
+      }),
+    });
+    const fetchImpl = vi.fn(async () => {
+      throw unresolved;
+    });
+    const notifier = new TelegramNotifier(CONFIG, fetchImpl, {
+      maxRetries: 2,
+      transportRetryBaseMs: 0,
+    });
+
+    const result = await notifier.notify(emptyDigest());
+
+    expect(result.ok).toBe(false);
+    // Initial attempt plus two retries.
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it("treats a 2xx response without message_id as an uncertain failure", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ ok: true, result: {} }));
     const notifier = new TelegramNotifier(CONFIG, fetchImpl);

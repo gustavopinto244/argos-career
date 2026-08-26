@@ -245,4 +245,80 @@ describe("TelegramNotifier durable chunk resume", () => {
     });
     expect(duplicateFetch).not.toHaveBeenCalled();
   });
+
+  it("leaves a never-opened connection retryable by the next run, not stuck uncertain (ADR-065)", async () => {
+    // Reproduces the 2026-08-25 incident: the digest was composed in full,
+    // the send failed at the transport, and the chunk was left `uncertain`
+    // — which `sendDurable` refuses to re-send. The posting was only
+    // delivered 24h later, by the next night's freshly-composed digest.
+    const digest = multiChunkDigest();
+    const refused = Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(new Error("connect ECONNREFUSED"), {
+        code: "ECONNREFUSED",
+      }),
+    });
+
+    const failingFetch = vi.fn<typeof fetch>(async () => {
+      throw refused;
+    });
+    const failingNotifier = new TelegramNotifier(CONFIG, failingFetch, {
+      pacingMs: 0,
+      maxRetries: 1,
+      transportRetryBaseMs: 0,
+      deliveryStore: repository,
+      now: () => NOW,
+    });
+    await expect(failingNotifier.notify(digest)).resolves.toMatchObject({
+      ok: false,
+    });
+
+    // The point of the fix: the chunk is left `failed`, not `uncertain`, so
+    // the next run delivers it rather than refusing with "reconcile it
+    // before retrying" — which is what the assertion below proves.
+    let nextMessageId = 300;
+    const retryFetch = vi.fn<typeof fetch>(async () =>
+      Promise.resolve(success(nextMessageId++)),
+    );
+    const retryNotifier = new TelegramNotifier(CONFIG, retryFetch, {
+      pacingMs: 0,
+      deliveryStore: new DeliveryOperationsRepository(db),
+      now: () => new Date(NOW.getTime() + 1_000),
+    });
+    await expect(retryNotifier.notify(digest)).resolves.toEqual({ ok: true });
+    expect(retryFetch).toHaveBeenCalled();
+  });
+
+  it("still refuses to re-send after a timeout, which may have been delivered (ADR-065)", async () => {
+    // The guard this change must not weaken. An AbortError leaves the chunk
+    // uncertain on purpose: re-sending could post the digest twice.
+    const digest = multiChunkDigest();
+    const aborted = Object.assign(new Error("The operation was aborted"), {
+      name: "AbortError",
+    });
+
+    const failingFetch = vi.fn<typeof fetch>(async () => {
+      throw aborted;
+    });
+    const failingNotifier = new TelegramNotifier(CONFIG, failingFetch, {
+      pacingMs: 0,
+      transportRetryBaseMs: 0,
+      deliveryStore: repository,
+      now: () => NOW,
+    });
+    await expect(failingNotifier.notify(digest)).resolves.toMatchObject({
+      ok: false,
+    });
+
+    const retryFetch = vi.fn<typeof fetch>();
+    const retryNotifier = new TelegramNotifier(CONFIG, retryFetch, {
+      pacingMs: 0,
+      deliveryStore: new DeliveryOperationsRepository(db),
+      now: () => new Date(NOW.getTime() + 1_000),
+    });
+    await expect(retryNotifier.notify(digest)).resolves.toMatchObject({
+      ok: false,
+      error: { message: expect.stringContaining("uncertain chunk") },
+    });
+    expect(retryFetch).not.toHaveBeenCalled();
+  });
 });

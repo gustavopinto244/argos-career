@@ -41,6 +41,7 @@ export interface TelegramNotifierOptions {
   readonly pacingMs?: number;
   readonly maxRetries?: number;
   readonly retryAfterCapMs?: number;
+  readonly transportRetryBaseMs?: number;
   readonly timeoutMs?: number;
   readonly maxResponseBytes?: number;
   readonly deliveryStore?: DeliveryCheckpointPort;
@@ -48,8 +49,66 @@ export interface TelegramNotifierOptions {
   readonly now?: () => Date;
 }
 
+/** Base for the exponential backoff between transport retries (ADR-065).
+ * Short on purpose: this covers a connection that never opened, and the run
+ * holding the `RunLock` is waiting on it. */
+const DEFAULT_TRANSPORT_RETRY_BASE_MS = 500;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Node/undici error codes for a failure that happened *before* any request
+ * byte could reach Telegram: the name never resolved, or the connection was
+ * refused or had nowhere to go. A message cannot have been delivered over a
+ * connection that was never established, so this is the one class of
+ * transport failure that is safe to retry and safe to declare undelivered.
+ *
+ * Codes that mean the connection existed and then broke — `ECONNRESET`,
+ * `EPIPE`, `ETIMEDOUT` — are deliberately absent: the request may have been
+ * fully sent and acknowledged before the socket died, which is exactly the
+ * `uncertain` case this list must not swallow.
+ */
+const NEVER_SENT_ERROR_CODES: ReadonlySet<string> = new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENETDOWN",
+]);
+
+/**
+ * Whether a thrown `fetch` failure proves the message was never delivered.
+ *
+ * `fetch` reports connection failures as a `TypeError: fetch failed` whose
+ * `cause` carries the real `code`, sometimes nested another level down, so
+ * this walks the cause chain rather than reading one property. An
+ * `AbortError` — this client's own timeout firing — is explicitly *not*
+ * proof of anything: the request may well have arrived and been processed
+ * while the response was still in flight, and treating that as undelivered
+ * is how a digest gets sent twice (ADR-065).
+ */
+function isCertainlyUndelivered(cause: unknown): boolean {
+  for (let current = cause, depth = 0; current != null && depth < 5; depth++) {
+    const error = current as {
+      name?: unknown;
+      code?: unknown;
+      cause?: unknown;
+    };
+    if (error.name === "AbortError" || error.name === "TimeoutError") {
+      return false;
+    }
+    if (
+      typeof error.code === "string" &&
+      NEVER_SENT_ERROR_CODES.has(error.code)
+    ) {
+      return true;
+    }
+    current = error.cause;
+  }
+  return false;
 }
 
 /**
@@ -198,6 +257,7 @@ export class TelegramNotifier implements NotifierPort, TextNotifier {
   private readonly pacingMs: number;
   private readonly maxRetries: number;
   private readonly retryAfterCapMs: number;
+  private readonly transportRetryBaseMs: number;
   private readonly timeoutMs: number;
   private readonly maxResponseBytes: number;
   private readonly deliveryStore: DeliveryCheckpointPort | undefined;
@@ -213,6 +273,8 @@ export class TelegramNotifier implements NotifierPort, TextNotifier {
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.retryAfterCapMs =
       options.retryAfterCapMs ?? DEFAULT_RETRY_AFTER_CAP_MS;
+    this.transportRetryBaseMs =
+      options.transportRetryBaseMs ?? DEFAULT_TRANSPORT_RETRY_BASE_MS;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxResponseBytes =
       options.maxResponseBytes ?? DEFAULT_TELEGRAM_MAX_RESPONSE_BYTES;
@@ -223,6 +285,7 @@ export class TelegramNotifier implements NotifierPort, TextNotifier {
       ["pacingMs", this.pacingMs],
       ["maxRetries", this.maxRetries],
       ["retryAfterCapMs", this.retryAfterCapMs],
+      ["transportRetryBaseMs", this.transportRetryBaseMs],
       ["timeoutMs", this.timeoutMs],
       ["maxResponseBytes", this.maxResponseBytes],
       ["deliveryLeaseMs", this.deliveryLeaseMs],
@@ -435,6 +498,32 @@ export class TelegramNotifier implements NotifierPort, TextNotifier {
           );
         }
       } catch (cause) {
+        // ADR-065. Every thrown `fetch` failure used to land here as
+        // `uncertain: true`, which blocked the retry path entirely
+        // (`sendDurable` refuses to re-send an operation holding an
+        // uncertain chunk) and required a manual reconcile that, in
+        // practice, nobody performs at 03:00. A digest carrying a
+        // 100%-match posting was delayed a full day this way on
+        // 2026-08-25.
+        //
+        // A connection that never opened is different in kind: the message
+        // provably did not arrive, so retrying cannot duplicate it.
+        if (isCertainlyUndelivered(cause)) {
+          if (attempt < this.maxRetries) {
+            await sleep(this.transportRetryBaseMs * 2 ** attempt);
+            continue;
+          }
+          // Retries exhausted, but still provably undelivered — `failed`,
+          // not `uncertain`, so the next run re-sends rather than halting
+          // on a chunk no human will ever reconcile.
+          return {
+            ok: false,
+            error: { message: "Telegram request failed", cause },
+            uncertain: false,
+          };
+        }
+        // A timeout, or a connection that broke mid-flight: the request may
+        // have been received. Unchanged behaviour, and deliberately so.
         return {
           ok: false,
           error: { message: "Telegram request failed", cause },

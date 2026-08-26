@@ -1977,3 +1977,66 @@ and term 4 never ran.
 > Re-run against the same harness: one term of four failing now ingests the
 > other three (3 postings, HTTP 201) with a warning; all four failing exits
 > non-zero and ingests nothing.
+
+---
+
+## B20 — A Telegram send that never left was treated as maybe-delivered, halting the retry
+
+**Status:** fixed (ADR-065) · **Found:** 2026-08-26, diagnosing why the
+operator received no digest on 2026-08-25
+
+The 2026-08-25 `scoreAndDeliver` run was recorded `failed` and no digest
+arrived. The logs made this look like an LLM problem — seven Stage A/B
+timeouts, two invalid outputs, one `matching_failed` — and every one of
+those was real and none was the cause.
+
+`delivery_chunks` was, reading Atlas directly:
+
+```
+status = 'uncertain', attempts = 1, last_error = 'Telegram request failed'
+delivery_operations.status = 'failed'
+```
+
+**The digest was composed in full** — 1265 bytes, carrying a posting scored
+**100%, verdict `apply`** (CRD - Centro de Referência Digital, "Estágio em
+Informática"). It failed at the transport on the first attempt and was
+never retried. That posting reached Telegram 24 hours later, when the next
+night's run composed a fresh digest.
+
+Two parts of the design are why this was a delay and not a loss, and both
+deserve recording: `notified_at` is written only on confirmation (ADR-007),
+so nothing was marked delivered that was not; and the `matching_failed`
+posting went to the review section with a manual-review notice, exactly as
+ADR-006 requires.
+
+**The defect** was in `sendMessageDetailed`, which classified _every_ thrown
+`fetch` failure as `uncertain: true`. That is correct for a timeout or a
+socket that dies mid-flight — the request may have been received, and
+re-sending would post the digest twice, which is why `sendDurable` refuses
+to re-send an operation holding an uncertain chunk. It is wrong for a
+connection that never opened: DNS failing or a refused connection means no
+request byte reached Telegram, so the message provably was not delivered
+and retrying cannot duplicate it. Collapsing the two turned the most common
+transient network failure into a halt awaiting a manual reconcile that, at
+03:00 on a one-operator system, never comes. `attempts = 1` is the whole
+story.
+
+> **Fixed, 2026-08-26 (ADR-065).** A short allowlist of error codes meaning
+> "the connection never opened" (`ENOTFOUND`, `EAI_AGAIN`, `ECONNREFUSED`,
+> `EHOSTUNREACH`, `ENETUNREACH`, `ENETDOWN`) is retried in place with
+> exponential backoff, and left `failed` rather than `uncertain` if retries
+> are exhausted, so the next run re-sends. `AbortError`/`TimeoutError` and
+> the mid-flight codes (`ECONNRESET`, `EPIPE`, `ETIMEDOUT`) are explicitly
+> excluded and keep today's behaviour. Unrecognised codes stay `uncertain`
+> — it is an allowlist, and the safe default is unchanged.
+>
+> Three of the new tests were verified to fail against the previous
+> implementation by reverting the predicate and re-running, so they test
+> the fix rather than restating it.
+
+**Still open, and deliberately not fixed here.** The run recorded
+`outcome: failed` with `failure_reason: null`, which is why the logs were
+misread as an LLM failure in the first place — a failed run should say what
+failed. And a delivery failure is alerted over Telegram, the channel that
+had just failed, so nothing reported this at the time. Both are real, both
+are separate from the classification bug.
