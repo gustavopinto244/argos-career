@@ -7,6 +7,7 @@ import { postings } from "../../src/persistence/infrastructure/schema";
 import {
   CollectorResolver,
   computeRecencyWindowDays,
+  describeUrlShape,
   executeCollect,
   executeDedup,
   executeDeliver,
@@ -1176,6 +1177,77 @@ function recordingNotifier(result: NotifyResult = { ok: true }): {
   };
 }
 
+describe("describeUrlShape (ADR-064)", () => {
+  it("distinguishes the link shape the normalizer accepts from the one it rejects", () => {
+    // The single question the LinkedIn fix turns on. Both are real shapes:
+    // the canonical alert link, and LinkedIn's email tracking redirect.
+    expect(
+      describeUrlShape("https://www.linkedin.com/jobs/view/4451703964/"),
+    ).toMatchObject({
+      host: "www.linkedin.com",
+      pathTemplate: "/jobs/view/<digits>",
+      hasJobsViewPath: true,
+    });
+    expect(
+      describeUrlShape("https://www.linkedin.com/e/v2?e=tok"),
+    ).toMatchObject({
+      pathTemplate: "/e/v2",
+      hasJobsViewPath: false,
+      hasQuery: true,
+    });
+  });
+
+  it("survives a /comm/-prefixed link with tracking parameters", () => {
+    expect(
+      describeUrlShape(
+        "https://www.linkedin.com/comm/jobs/view/4451703964/?trk=eml-jobs_jymbii",
+      ),
+    ).toMatchObject({
+      pathTemplate: "/comm/jobs/view/<digits>",
+      hasJobsViewPath: true,
+      hasQuery: true,
+    });
+  });
+
+  it("names each way a link can be absent, since they are different bugs", () => {
+    // "n8n sent no Link key" and "n8n sent an empty Link" call for different
+    // fixes in different places; one `kind` for both would hide that.
+    expect(describeUrlShape(undefined)).toEqual({ kind: "absent" });
+    expect(describeUrlShape(null)).toEqual({ kind: "null" });
+    expect(describeUrlShape("   ")).toEqual({ kind: "empty" });
+    expect(describeUrlShape(42)).toEqual({
+      kind: "not-a-string",
+      valueType: "number",
+    });
+  });
+
+  it("still answers the normalizer's predicate for a link URL cannot parse", () => {
+    expect(describeUrlShape("/jobs/view/4451703964/")).toEqual({
+      kind: "unparseable",
+      hasJobsViewPath: true,
+    });
+  });
+
+  it("masks path segments that could carry identity, and never the query", () => {
+    const shape = describeUrlShape(
+      "https://example.com/u/aVeryLongOpaqueTokenSegment123456/x?token=secret",
+    ) as Record<string, unknown>;
+
+    expect(shape.pathTemplate).toBe("/u/<opaque>/x");
+    expect(shape.hasQuery).toBe(true);
+    // The whole reason this function exists instead of storing the link.
+    expect(JSON.stringify(shape)).not.toContain("secret");
+    expect(JSON.stringify(shape)).not.toContain("aVeryLongOpaqueTokenSegment");
+  });
+
+  it("bounds how much of a long path it describes", () => {
+    const shape = describeUrlShape(
+      `https://example.com/${Array.from({ length: 20 }, (_, i) => `s${i}`).join("/")}`,
+    ) as { pathTemplate: string };
+    expect(shape.pathTemplate.split("/").filter(Boolean)).toHaveLength(8);
+  });
+});
+
 describe("executeIngestExternal", () => {
   const NOW = new Date("2026-08-16T14:00:00Z");
 
@@ -1318,6 +1390,74 @@ describe("executeIngestExternal", () => {
     expect(stored?.company).toBe("Empresa X");
     // sourceId recovered from the link, since the flat shape carries none.
     expect(stored?.sourceId).toBe("4451703964");
+  });
+
+  it("records the run's unnormalizable count on the run row, not only in sourceQueryStats (ADR-064)", async () => {
+    // The row that hid LinkedIn's 100% loss for eight days read
+    // `collected: N, normalized: 0, unnormalizable: 0` — arithmetically
+    // impossible, and indistinguishable from a source that sent nothing.
+    const outcome = await executeIngestExternal(
+      db,
+      "linkedin",
+      normalizeLinkedinAlertJob,
+      [
+        // The exact shape Atlas recorded: flat, Title Case, no sourceId,
+        // and a link carrying no /jobs/view/<digits> to recover one from.
+        {
+          Title: "Estágio Backend",
+          Company: "Empresa X",
+          Location: "Rio de Janeiro, RJ (Híbrido)",
+          Link: "https://www.linkedin.com/e/v2?e=tracking",
+        } as unknown as ExternalRawPosting,
+      ],
+      () => NOW,
+    );
+
+    expect(outcome.normalized).toBe(0);
+    expect(outcome.unnormalizable).toBe(1);
+
+    const run = new RunsRepository(db).findById(outcome.runId);
+    expect(run?.collectedCount).toBe(1);
+    expect(run?.normalizedCount).toBe(0);
+    expect(run?.unnormalizableCount).toBe(1);
+  });
+
+  it("records a rejected item's link shape, masked, so the next real ingest says why (ADR-064)", async () => {
+    const outcome = await executeIngestExternal(
+      db,
+      "linkedin",
+      normalizeLinkedinAlertJob,
+      [
+        {
+          Title: "Estágio Backend",
+          Company: "Empresa X",
+          Location: "Rio de Janeiro, RJ (Híbrido)",
+          Link: "https://www.linkedin.com/e/v2?e=account-identifying-token",
+        } as unknown as ExternalRawPosting,
+      ],
+      () => NOW,
+    );
+
+    const [event] = new PostingEventsRepository(db).findByRun(outcome.runId);
+    expect(event?.outcome).toBe("normalization_rejected");
+    const metadata = parsePostingEventMetadata(event!) as {
+      linkKey?: string;
+      linkShape?: Record<string, unknown>;
+    };
+
+    expect(metadata.linkKey).toBe("Link");
+    expect(metadata.linkShape).toMatchObject({
+      kind: "url",
+      host: "www.linkedin.com",
+      pathTemplate: "/e/v2",
+      hasQuery: true,
+      // The predicate `deriveSourceIdFromLink` applies — false is exactly
+      // the fact that explains the rejection.
+      hasJobsViewPath: false,
+    });
+    // The boundary this diagnostic exists inside: the tracking token must
+    // not survive anywhere in the recorded metadata.
+    expect(JSON.stringify(metadata)).not.toContain("account-identifying-token");
   });
 
   it("counts an item the normalizer rejects as unnormalizable, not a thrown error", async () => {
