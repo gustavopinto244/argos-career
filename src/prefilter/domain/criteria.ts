@@ -260,6 +260,20 @@ export const CriteriaSchema = z.object({
    */
   undatedBacklogCutoverAt: z.coerce.date().nullable().default(null),
   /**
+   * How recently the source must have still been listing a posting for that
+   * to override the age rules above (ADR-066). `lastSeenAt` within this
+   * window is direct evidence the posting is still being advertised, which
+   * outranks `publishedAt`/`firstSeenAt` estimates of when it appeared.
+   *
+   * Must comfortably exceed the slowest source's collection interval, or a
+   * posting that is still listed reads as gone purely because its source has
+   * not been swept since. Used only to rescue a posting from `too_old`,
+   * never to reject one — see `isStillListedBySource`.
+   *
+   * `null` (the default) disables it, restoring the pre-ADR-066 behaviour.
+   */
+  stillListedWithinHours: z.number().positive().nullable().default(null),
+  /**
    * How far into the future a source's `publishedAt` is still trusted
    * (docs/audit AC-029). A source reporting `publishedAt` beyond this
    * window — clock skew, a `date_posted` format a normalizer misparses, or

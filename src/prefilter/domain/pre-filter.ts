@@ -48,6 +48,51 @@ function isExpired(posting: Posting, now: Date): boolean {
 }
 
 /**
+ * Whether the source was **still listing this posting** on its most recent
+ * sweep (ADR-066).
+ *
+ * `maxAgeDays` asks "how long ago was this published", which is a proxy for
+ * the question that actually matters: is it still open. `lastSeenAt` answers
+ * that question directly — a posting the source returned an hour ago is
+ * being advertised right now, whatever its publication date says — and the
+ * collector has always recorded it (ADR-007's upsert moves it on every
+ * sighting). The pre-filter simply never read it.
+ *
+ * Measured on the real corpus, 2026-08-26: of 26 on-track, never-notified
+ * postings in the Rio metro that `maxAgeDays: 7` rejected, **8 were still
+ * being listed by their source** — including "Estágio em TI" (BHG, Rio) at
+ * 21 days published and seen 7 h earlier, and two CIEE "Estágio em
+ * Informática" seen 54 minutes earlier. The other 18 had genuinely vanished
+ * from their source, which is exactly what the age rule should catch.
+ *
+ * **The signal is deliberately used in one direction only.** "Still listed"
+ * rescues a posting from the age rule; "no longer listed" is never used to
+ * reject one, because it is not reliable evidence of closure — a source that
+ * paginates can drop a still-open posting out of the collected window
+ * (`truncatedSources: ["gupy"]` is recorded on most real runs). Rescue is
+ * safe under that asymmetry; rejection would not be.
+ *
+ * Checked before `undatedBacklogCutoverAt` on purpose. The cutover exists to
+ * retire an undated backlog nobody can date, and a posting the source served
+ * up today is not backlog — the CIEE rows above were first seen 8 hours
+ * before the cutover instant and are still being advertised ten days later.
+ *
+ * `null` disables this and restores the previous behaviour exactly.
+ */
+function isStillListedBySource(
+  posting: Posting,
+  stillListedWithinHours: number | null,
+  now: Date,
+): boolean {
+  if (stillListedWithinHours === null) return false;
+  const sinceLastSeenMs = now.getTime() - posting.lastSeenAt.getTime();
+  // A future `lastSeenAt` is clock skew, not freshness — treat it as not
+  // evidence rather than letting a bad timestamp rescue anything.
+  if (sinceLastSeenMs < 0) return false;
+  return sinceLastSeenMs <= stillListedWithinHours * 60 * 60 * 1000;
+}
+
+/**
  * Age, measured from `publishedAt` when the source states one and
  * `firstSeenAt` when it does not.
  *
@@ -92,8 +137,12 @@ function isTooOld(
   undatedBacklogCutoverAt: Date | null,
   maxFutureSkewDays: number,
   now: Date,
+  stillListedWithinHours: number | null = null,
 ): boolean {
   if (maxAgeDays === null) return false;
+  // ADR-066: direct evidence the posting is still open outranks every
+  // date-based estimate below it, including the cutover.
+  if (isStillListedBySource(posting, stillListedWithinHours, now)) return false;
   if (
     posting.publishedAt === null &&
     undatedBacklogCutoverAt !== null &&
@@ -247,6 +296,7 @@ export function applyPreFilter(
       criteria.undatedBacklogCutoverAt,
       criteria.maxFutureSkewDays,
       now,
+      criteria.stillListedWithinHours,
     )
   ) {
     return outcome(false, "too_old");
