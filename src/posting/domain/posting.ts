@@ -51,6 +51,28 @@ export interface Posting {
    * posting with no link as undeliverable-without-a-fallback — see
    * `docs/02-architecture.md`'s "link is mandatory" rule. */
   readonly sourceUrl: string | null;
+  /**
+   * ISO 3166-1 alpha-2, uppercase (`"BR"`, `"US"`), or null when the source
+   * states no country (ADR-068).
+   *
+   * Distinct from `location`, which is a city and answers "where is the
+   * work". This answers "under whose jurisdiction is the hiring" — the axis
+   * that decides whether an internship can be taken at all from Brazil, and
+   * the one the scoring budget is split along: a national posting is
+   * eligible by construction, an international one has to be *evaluated* to
+   * find out, and that evaluation costs a model call.
+   *
+   * **Null is not "unknown country" in practice** — every source wired up
+   * today is a Brazilian platform, so `criteria.sourceDefaultCountry` maps a
+   * null from a known-Brazilian source to national. That is a property of
+   * the source, the same reasoning `location.nationwideSources` already
+   * uses, not a guess about the posting.
+   *
+   * Deliberately **not** part of the fingerprint (`computeFingerprint`):
+   * identity is company+title+city (ADR-007), and adding a field to it would
+   * re-collect the entire corpus as new.
+   */
+  readonly country: string | null;
   readonly collectedAt: Date;
   readonly firstSeenAt: Date;
   readonly lastSeenAt: Date;
@@ -70,11 +92,32 @@ export type CreatePostingInput = {
   publishedAt?: Date | null;
   description?: string | null;
   sourceUrl?: string | null;
+  /** ISO 3166-1 alpha-2; case and surrounding space are normalized by
+   * `createPosting`. Anything that is not two letters becomes null — see
+   * `normalizeCountry`. */
+  country?: string | null;
   collectedAt: Date;
   firstSeenAt: Date;
   lastSeenAt: Date;
   rawPayload: unknown;
 };
+
+/**
+ * `"br"`, `" BR "`, `"Br"` → `"BR"`. Anything else — a full country name, a
+ * three-letter code, an empty string — → `null` (ADR-068).
+ *
+ * Rejecting rather than translating is the point. A normalizer that turned
+ * `"Brazil"` into `"BR"` would need a name table, and the moment it met
+ * `"Brasil"`, `"Brésil"` or a misspelling it would either grow indefinitely
+ * or guess. `null` costs nothing here, because `sourceDefaultCountry`
+ * already covers every source in production — CLAUDE.md §15: do not invent a
+ * fact that can be checked.
+ */
+export function normalizeCountry(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(trimmed) ? trimmed : null;
+}
 
 /**
  * Enforces the invariants in docs/05-domain-model.md at construction:
@@ -111,6 +154,7 @@ export function createPosting(input: CreatePostingInput): Posting {
     publishedAt: input.publishedAt ?? null,
     description: input.description ?? null,
     sourceUrl: input.sourceUrl ?? null,
+    country: normalizeCountry(input.country),
     collectedAt: input.collectedAt,
     firstSeenAt: input.firstSeenAt,
     lastSeenAt: input.lastSeenAt,

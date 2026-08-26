@@ -45,6 +45,9 @@ function criteria(): Criteria {
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
     stillListedWithinHours: null,
+    sourceDefaultCountry: {},
+    homeCountry: "BR",
+    maxInternationalPerRun: null,
     maxFutureSkewDays: 1,
     tracks: {
       dev: ["backend"],

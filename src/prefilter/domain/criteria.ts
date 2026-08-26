@@ -274,6 +274,40 @@ export const CriteriaSchema = z.object({
    */
   stillListedWithinHours: z.number().positive().nullable().default(null),
   /**
+   * The country a source's postings belong to when the posting itself states
+   * none — ISO 3166-1 alpha-2, keyed by source name (ADR-068).
+   *
+   * Every source wired up today is a Brazilian platform, and most state no
+   * country at all, so without this every existing posting would read as
+   * "unknown nationality" and fall into the capped international bucket —
+   * inverting the priority this exists to express.
+   *
+   * A property of the **source**, not a guess about the posting, which is
+   * the same standing `location.nationwideSources` already has. A source
+   * absent from this map and a posting with no country stay unknown, and
+   * `isNationalPosting` treats unknown as international — the conservative
+   * direction, since an unknown posting then competes for the capped budget
+   * instead of consuming the uncapped one.
+   */
+  sourceDefaultCountry: z.record(z.string(), z.string()).default({}),
+  /**
+   * The country the profile can actually be hired in. Postings from here are
+   * "national" and are scored without a cap; everything else is capped
+   * (ADR-068).
+   */
+  homeCountry: z.string().default("BR"),
+  /**
+   * How many international postings a single scoring run may spend model
+   * calls on. National postings are never capped — see ADR-068 for why the
+   * asymmetry is the whole point. `null` disables the cap entirely.
+   */
+  maxInternationalPerRun: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullable()
+    .default(null),
+  /**
    * How far into the future a source's `publishedAt` is still trusted
    * (docs/audit AC-029). A source reporting `publishedAt` beyond this
    * window — clock skew, a `date_posted` format a normalizer misparses, or

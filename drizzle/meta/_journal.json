@@ -183,6 +183,13 @@
       "when": 1787735652974,
       "tag": "0025_shocking_tombstone",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1787764336097,
+      "tag": "0026_odd_colonel_america",
+      "breakpoints": true
     }
   ]
 }

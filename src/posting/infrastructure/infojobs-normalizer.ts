@@ -1,5 +1,10 @@
 import { RawPosting } from "../domain/raw-posting";
-import { createPosting, Location, Posting } from "../domain/posting";
+import {
+  createPosting,
+  Location,
+  normalizeCountry,
+  Posting,
+} from "../domain/posting";
 import { InfoJobsJob, InfoJobsJobSchema } from "./infojobs-schema";
 
 /**
@@ -21,6 +26,21 @@ function cleanDescription(raw: string | null | undefined): string | null {
 function mapLocation(job: InfoJobsJob): Location {
   const city = job.jobLocation?.address?.addressLocality;
   return city ? { kind: "known", city } : { kind: "unknown" };
+}
+
+/**
+ * schema.org allows `addressCountry` to be either a bare string ("BR") or a
+ * nested `Country` object with a `name` (ADR-068), so this reads both shapes
+ * and lets `normalizeCountry` reject anything that is not a two-letter code.
+ * Was not present in the captured sample; null is the expected result today
+ * and `sourceDefaultCountry` covers it.
+ */
+function mapCountry(job: InfoJobsJob): string | null {
+  const raw = job.jobLocation?.address?.addressCountry;
+  if (raw !== null && typeof raw === "object" && "name" in raw) {
+    return normalizeCountry((raw as { name?: unknown }).name);
+  }
+  return normalizeCountry(raw);
 }
 
 function parseDate(value: string | null | undefined): Date | null {
@@ -69,6 +89,7 @@ export function normalizeInfoJobsJob(
       company,
       title: job.title,
       location: mapLocation(job),
+      country: mapCountry(job),
       workMode: job.isRemoteQuery === true ? "remote" : "unknown",
       applicationDeadline: parseDate(job.validThrough),
       publishedAt: parseDate(job.datePosted),

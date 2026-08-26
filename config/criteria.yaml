@@ -341,6 +341,54 @@ undatedBacklogCutoverAt: "2026-08-16T12:15:00Z"
 # evidence of closure. null disables this entirely.
 stillListedWithinHours: 30
 
+# ADR-068. Which country's postings can actually be taken, and how the nightly
+# scoring budget is split along that line.
+#
+# `homeCountry` is where the profile can be hired. A posting from here is
+# "national" and is NEVER capped -- it is eligible by construction, and its
+# measured worth is high: on the real corpus (2026-08-26) remote postings
+# delivered at 21.4% (42 collected, 9 delivered) against 1.4% for onsite.
+#
+# An international posting is a different kind of thing: it has to be
+# *evaluated* to find out whether it can be taken from Brazil at all. A
+# residency or visa requirement becomes a `blocking` requirement in Stage A
+# and caps the score at `blockingCapScore` -- the mechanism already exists and
+# needs no new rule. What it costs is a model call per posting, spent whether
+# the answer turns out to be yes or no. `maxInternationalPerRun` bounds how
+# many of those guesses one night pays for; national postings are never
+# counted against it.
+#
+# `null` disables the cap. Left null today ON PURPOSE: no international source
+# is wired up yet, so every posting in the corpus is national and a number
+# here would be untested config pretending to be a measurement. It gets a real
+# value in the same PR that adds the first international source, measured the
+# way every other number in this file was.
+homeCountry: BR
+maxInternationalPerRun: null
+
+# The country a source's postings belong to when the posting itself states
+# none -- a property of the SOURCE, not a guess about the posting, the same
+# standing `location.nationwideSources` already has.
+#
+# Every source wired up today is a Brazilian platform, and most state no
+# country at all: gupy/ciee/solides publish no country field, InfoJobs's
+# JSON-LD carries `addressCountry` only sometimes, and Indeed's collector pins
+# `country_indeed="Brazil"` (`collectors/indeed/collect.py`). Without this map
+# the entire existing corpus would read as "unplaceable" and fall into the
+# capped international bucket -- the exact inversion of the priority above.
+#
+# A source absent from here whose postings state no country is treated as
+# international, deliberately: an unplaceable posting should compete for the
+# bounded budget, not the unbounded one.
+sourceDefaultCountry:
+  gupy: BR
+  ciee: BR
+  infojobs: BR
+  solides: BR
+  indeed: BR
+  catho: BR
+  linkedin: BR
+
 # How far into the future a source's publishedAt is still trusted
 # (docs/audit AC-029). Beyond this, it is treated as an unreliable date --
 # clock skew, a misparsed format, a bad value like the year 2099 -- not
