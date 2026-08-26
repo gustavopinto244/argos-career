@@ -1982,7 +1982,7 @@ and term 4 never ran.
 
 ## B20 — A Telegram send that never left was treated as maybe-delivered, halting the retry
 
-**Status:** fixed (ADR-065) · **Found:** 2026-08-26, diagnosing why the
+**Status:** fixed (ADR-065, ADR-067) · **Found:** 2026-08-26, diagnosing why the
 operator received no digest on 2026-08-25
 
 The 2026-08-25 `scoreAndDeliver` run was recorded `failed` and no digest
@@ -2040,3 +2040,34 @@ misread as an LLM failure in the first place — a failed run should say what
 failed. And a delivery failure is alerted over Telegram, the channel that
 had just failed, so nothing reported this at the time. Both are real, both
 are separate from the classification bug.
+
+> **Both closed, 2026-08-26 (ADR-067).**
+>
+> **`failure_reason`.** Five paths marked a run `failed` while holding the
+> explanation in a local variable and dropping it — `executeDeliver`'s
+> notify-failed, batch-fatal and caught-throw branches, and `executeDedup`'s
+> two catches. All five now write it. (`executeCollect` and
+> `executeIngestExternal` always had.) The notify-failed case is this
+> entry's own: the reason was already being returned to the caller while the
+> stored row said only `failed`. Its test was verified to fail against the
+> previous implementation, reproducing exactly `expected null to be
+'Telegram unreachable'`.
+>
+> **The alert channel.** Not fixed by adding a second channel — `docs/08`
+> rejects that as "infrastructure nobody maintains", and that reasoning
+> holds. Fixed by moving the alert in time instead: an alert whose send
+> fails is queued in `pending_alerts` and redelivered on the next cycle
+> whose send succeeds, prefixed with when it was first raised and how many
+> times the condition recurred. Deduped on `text` (the conditions are
+> level-triggered, so an outage would otherwise queue the same sentence
+> every cycle), oldest-first, capped at 5 per cycle against Telegram's
+> per-chat rate limit, stopping at the first failure, and drained on every
+> collection cycle including quiet ones.
+>
+> **What this still does not do.** If Telegram is down at 03:00 and stays
+> down through every later cycle, the alert still never arrives — the queue
+> only helps when the channel returns. The common case (a transient blip)
+> now self-heals within one 4-hour cycle instead of vanishing into journald;
+> a sustained outage remains unreported by design, for the reason above.
+
+**This entry is now fully resolved.**

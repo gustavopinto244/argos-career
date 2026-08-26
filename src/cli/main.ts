@@ -537,6 +537,20 @@ function payloadOf(raw: ExternalRawPosting): unknown {
 }
 
 /**
+ * The message to store in `runs.failure_reason` for a caught throw (ADR-067).
+ *
+ * A run row saying `outcome: failed, failure_reason: null` states that
+ * something went wrong and refuses to say what — which is how the
+ * 2026-08-25 delivery failure (docs/11 B20) was read as an LLM problem for a
+ * day, the logs being full of unrelated OpenRouter timeouts at the time.
+ * Every `failed` path already holds the reason; this is just the shared way
+ * of turning it into a string.
+ */
+function failureMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
+/**
  * Route names in a URL path (`jobs`, `view`, `comm`, `e`, `v2`) describe the
  * shape of a link; the numeric id in `/jobs/view/4451703964/` and anything
  * opaque describe *which* posting, or worse, which account. Only the former
@@ -907,7 +921,10 @@ export function executeDedup(
   } catch (cause) {
     // See `executeCollect` — the row is closed before the throw is re-raised
     // so an open `finishedAt: null` can only ever mean "still running".
-    runsRepo.finish(runId, now(), "failed", { duplicateCount: 0 });
+    runsRepo.finish(runId, now(), "failed", {
+      duplicateCount: 0,
+      failureReason: failureMessage(cause),
+    });
     throw cause;
   }
 
@@ -1001,7 +1018,10 @@ function executeDedupAndClaim(
     outcome = result.dedupOutcome;
     claimed = result.claimedPostings;
   } catch (cause) {
-    runsRepo.finish(dedupRunId, now(), "failed", { duplicateCount: 0 });
+    runsRepo.finish(dedupRunId, now(), "failed", {
+      duplicateCount: 0,
+      failureReason: failureMessage(cause),
+    });
     throw cause;
   }
 
@@ -1184,6 +1204,7 @@ export async function executeDeliver(
       scoredCount,
       deliveredCount: 0,
       scoreFailureCounts: finalScoreFailureCounts(),
+      failureReason: failureMessage(cause),
       ...usageCounts(),
     });
     throw cause;
@@ -1426,6 +1447,10 @@ export async function executeDeliver(
         scoredCount,
         deliveredCount: 0,
         scoreFailureCounts: finalScoreFailureCounts(),
+        // The exact row docs/11 B20 was written about: this run failed at
+        // delivery, with the reason already in hand and returned to the
+        // caller below, while the stored row said only `failed`.
+        failureReason: notifyResult.error.message,
         ...usageCounts(),
       });
       return {
@@ -1491,6 +1516,12 @@ export async function executeDeliver(
         scoredCount,
         deliveredCount: sent.length,
         scoreFailureCounts: finalScoreFailureCounts(),
+        // Only on the `failed` branch: a cancelled or successful run has no
+        // failure to name, and writing one would make `failure_reason`
+        // ambiguous rather than informative.
+        ...(!cancelRequested && batchFatalReason
+          ? { failureReason: batchFatalReason }
+          : {}),
         ...usageCounts(),
       },
     );
