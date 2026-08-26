@@ -54,6 +54,13 @@ export const InfoJobsJobSchema = z
           .object({
             addressLocality: z.string().nullable().optional(),
             addressRegion: z.string().nullable().optional(),
+            // schema.org's own field for the country (ADR-068). Declared
+            // optional because it was NOT observed in the captured sample —
+            // this schema's `.passthrough()` discipline means an absent
+            // field is tolerated, and `sourceDefaultCountry` covers InfoJobs
+            // as Brazilian regardless. Reading it if it appears is free;
+            // requiring it would break a source that works today.
+            addressCountry: z.unknown().nullable().optional(),
           })
           .passthrough()
           .nullable()

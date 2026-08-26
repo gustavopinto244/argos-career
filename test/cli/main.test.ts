@@ -1105,6 +1105,9 @@ function deliverCriteria(): Criteria {
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
     stillListedWithinHours: null,
+    sourceDefaultCountry: {},
+    homeCountry: "BR",
+    maxInternationalPerRun: null,
     maxFutureSkewDays: 1,
     tracks: { dev: ["backend"], security: [], automation: [], data: [] },
     trackExclusions: { dev: [], security: [], automation: [], data: [] },
@@ -1608,6 +1611,119 @@ describe("executeDeliver", () => {
           e.stage === "dedup-similarity" && e.outcome === "shadow_candidate",
       ),
     ).toBe(true);
+  });
+
+  it("never caps national postings, however many pass (ADR-068)", async () => {
+    // The asymmetry this ADR exists for: a national posting is eligible by
+    // construction, so the budget must not bound it.
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: Array.from({ length: 6 }, (_, i) => ({
+        source: "gupy",
+        sourceId: String(i + 1),
+        payload: gupyPayload(i + 1, "Estágio em Backend", `Empresa ${i + 1}`),
+      })),
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const criteria = {
+      ...deliverCriteria(),
+      sourceDefaultCountry: { gupy: "BR" },
+      maxInternationalPerRun: 2,
+    };
+    const scorer = new StubScorer(criteria);
+    const { notifier } = recordingNotifier();
+
+    const outcome = await executeDeliver(
+      db,
+      scorer,
+      notifier,
+      criteria,
+      deliverProfile(),
+    );
+
+    expect(outcome.filtered).toBe(6);
+    expect(outcome.scored).toBe(6);
+  });
+
+  it("caps international postings and defers the rest, recording why (ADR-068)", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: Array.from({ length: 5 }, (_, i) => ({
+        source: "gupy",
+        sourceId: String(i + 1),
+        payload: gupyPayload(i + 1, "Estágio em Backend", `Empresa ${i + 1}`),
+      })),
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    // No source default and no stated country -> unplaceable -> treated as
+    // international, which is the conservative direction the ADR argues for.
+    const criteria = {
+      ...deliverCriteria(),
+      sourceDefaultCountry: {},
+      maxInternationalPerRun: 2,
+    };
+    const scorer = new StubScorer(criteria);
+    const { notifier } = recordingNotifier();
+
+    const outcome = await executeDeliver(
+      db,
+      scorer,
+      notifier,
+      criteria,
+      deliverProfile(),
+    );
+
+    expect(outcome.filtered).toBe(2);
+    expect(outcome.scored).toBe(2);
+
+    const events = new PostingEventsRepository(db).findByRun(outcome.runId);
+    const deferred = events.filter((e) => e.outcome === "deferred");
+    expect(deferred).toHaveLength(3);
+    expect(deferred[0]?.reason).toBe("international_budget_exhausted");
+
+    // Deferred, not consumed: still unnotified, so the next run reconsiders
+    // them in full.
+    const unnotified = new PostingsRepository(db).findUnnotified();
+    expect(unnotified.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("is inert when maxInternationalPerRun is null (ADR-068)", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: Array.from({ length: 4 }, (_, i) => ({
+        source: "gupy",
+        sourceId: String(i + 1),
+        payload: gupyPayload(i + 1, "Estágio em Backend", `Empresa ${i + 1}`),
+      })),
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const criteria = {
+      ...deliverCriteria(),
+      sourceDefaultCountry: {},
+      maxInternationalPerRun: null,
+    };
+    const scorer = new StubScorer(criteria);
+    const { notifier } = recordingNotifier();
+
+    const outcome = await executeDeliver(
+      db,
+      scorer,
+      notifier,
+      criteria,
+      deliverProfile(),
+    );
+
+    // Everything scored even though nothing is placeable — null disables the
+    // cap entirely, which is production's current setting.
+    expect(outcome.scored).toBe(4);
+    const events = new PostingEventsRepository(db).findByRun(outcome.runId);
+    expect(events.some((e) => e.outcome === "deferred")).toBe(false);
   });
 
   it("takes an unnotified posting end to end: pre-filter, score, digest, notify, mark notified", async () => {

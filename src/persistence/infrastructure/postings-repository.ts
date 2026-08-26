@@ -72,6 +72,7 @@ function rowToPosting(row: PostingRow): Posting {
     publishedAt: row.publishedAt,
     sourceUrl: row.sourceUrl,
     description: row.description,
+    country: row.country,
     // The stored row has no separate "collectedAt" column — lastSeenAt *is*
     // the most recent observation, which is what collectedAt means for a
     // hydrated (already-persisted) Posting.
@@ -155,6 +156,7 @@ export class PostingsRepository {
           publishedAt: posting.publishedAt,
           sourceUrl: posting.sourceUrl,
           description: posting.description,
+          country: posting.country,
           lastSeenAt: posting.lastSeenAt,
           rawPayload: JSON.stringify(posting.rawPayload),
           // firstSeenAt is deliberately absent from this SET clause.
@@ -178,6 +180,7 @@ export class PostingsRepository {
           publishedAt: posting.publishedAt,
           sourceUrl: posting.sourceUrl,
           description: posting.description,
+          country: posting.country,
           firstSeenAt: posting.firstSeenAt,
           lastSeenAt: posting.lastSeenAt,
           rawPayload: JSON.stringify(posting.rawPayload),

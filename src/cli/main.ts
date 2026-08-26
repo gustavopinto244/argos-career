@@ -45,6 +45,8 @@ import { applyPreFilter } from "../prefilter/domain/pre-filter";
 import { Criteria } from "../prefilter/domain/criteria";
 import { loadCriteria } from "../prefilter/infrastructure/criteria-loader";
 import { hashCriteria } from "../prefilter/domain/criteria-hash";
+import { partitionByOrigin } from "../prefilter/domain/posting-origin";
+import { rankForScoring } from "../prefilter/domain/rank-for-scoring";
 import { Profile } from "../profile/domain/profile";
 import { loadProfile } from "../profile/infrastructure/profile-loader";
 import { deriveProfileKeywords } from "../profile/domain/profile-keywords";
@@ -1287,11 +1289,64 @@ export async function executeDeliver(
       });
       if (result.passed) filtered.push(posting);
     }
-    filteredCount = filtered.length;
+
+    // ADR-068: national postings are scored without a cap and go first;
+    // international ones are capped.
+    //
+    // The asymmetry is the point, not a simplification. A national posting
+    // is eligible by construction and has a measured 21.4% delivery rate. An
+    // international one has to be *evaluated* to discover whether it can be
+    // taken from Brazil at all — a residency or visa requirement becomes a
+    // `blocking` requirement in Stage A and caps the score at
+    // `blockingCapScore` — and that discovery costs a model call whether the
+    // answer is yes or no. So the budget bounds the guesses, never the
+    // certainties.
+    //
+    // Ranking runs before partitioning so both buckets are ordered by the
+    // same rule, and ordering matters even where nothing is capped: if the
+    // run ends early (a provider outage, a cancel), what the budget already
+    // bought was spent on the freshest, best-matched postings rather than on
+    // whatever order SQLite happened to return.
+    const ranked = rankForScoring(filtered, criteria);
+    const { national, international } = partitionByOrigin(ranked, criteria);
+    const internationalBudget = criteria.maxInternationalPerRun;
+    const admittedInternational =
+      internationalBudget === null
+        ? international
+        : international.slice(0, internationalBudget);
+    const deferredInternational =
+      internationalBudget === null
+        ? []
+        : international.slice(internationalBudget);
+
+    for (const posting of deferredInternational) {
+      // Recorded, not silently dropped. A deferred posting keeps its
+      // `notifiedAt` null and has its claim released with every other
+      // unresolved one, so it returns to the pool next run -- but without an
+      // event, "why did this never reach me" would be unanswerable from the
+      // database, which is exactly what B20 cost a day of investigation.
+      postingEventsRepo.record({
+        runId,
+        fingerprint: posting.fingerprint,
+        source: posting.source,
+        sourceId: posting.sourceId,
+        stage: "prefilter",
+        outcome: "deferred",
+        reason: "international_budget_exhausted",
+        criteriaHash,
+        occurredAt: startedAt,
+      });
+    }
+
+    const admitted = [...national, ...admittedInternational];
+    // Counts what this run will actually attempt to score, so the digest's
+    // own "Após pré-filtro" line and `runs.filtered_count` stay reconcilable
+    // with `scored_count` rather than promising work that was never queued.
+    filteredCount = admitted.length;
 
     const scoredEntries: ScoredPosting[] = [];
     const periodBlockedEntries: PeriodBlockedEntry[] = [];
-    for (const posting of filtered) {
+    for (const posting of admitted) {
       // docs/11-known-issues.md C1: checked once per posting, the same
       // checkpoint granularity `batchFatalReason` below already uses --
       // never mid-Stage-A/B call, which is already a single bounded

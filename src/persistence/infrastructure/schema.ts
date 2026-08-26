@@ -51,6 +51,15 @@ export const postings = sqliteTable(
     // Null when the source provided no link. The digest (M6) treats the
     // original posting link as mandatory on every entry it can fill in.
     sourceUrl: text("source_url"),
+    // ISO 3166-1 alpha-2, uppercase, or null when the source states none
+    // (ADR-068). Not the same axis as `location_city`: that is where the work
+    // happens, this is whose jurisdiction the hiring falls under — which
+    // decides whether an internship is takeable from Brazil at all, and how
+    // the nightly scoring budget is split (national first, international
+    // capped). Null from a source listed in `criteria.sourceDefaultCountry`
+    // reads as that source's country, so a legacy row backfills to national
+    // without a data migration.
+    country: text("country"),
     // Null when the source provided none — stage A (M7) has nothing to
     // extract requirements from, distinct from a genuinely empty posting.
     description: text("description"),

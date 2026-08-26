@@ -1,5 +1,11 @@
 import { RawPosting } from "../domain/raw-posting";
-import { createPosting, Location, Posting, WorkMode } from "../domain/posting";
+import {
+  createPosting,
+  Location,
+  normalizeCountry,
+  Posting,
+  WorkMode,
+} from "../domain/posting";
 import { IndeedJob, IndeedJobSchema } from "./indeed-schema";
 
 /**
@@ -22,6 +28,25 @@ function mapWorkMode(isRemote: boolean | null | undefined): WorkMode {
 function mapLocation(location: string | null | undefined): Location {
   const city = location?.split(",")[0]?.trim();
   return city ? { kind: "known", city } : { kind: "unknown" };
+}
+
+/**
+ * The same free-text `location` string carries the country as its **last**
+ * comma-separated segment on every sampled row ("Rio de Janeiro, RJ, BR").
+ * Read only when that segment is already a two-letter code (ADR-068) —
+ * `normalizeCountry` rejects anything else, so a row shaped
+ * "Rio de Janeiro, RJ" or "Brazil" yields null rather than a guess.
+ *
+ * Null is not a problem in practice: `criteria.sourceDefaultCountry` maps
+ * Indeed's null to BR, because `collectors/indeed/collect.py` pins
+ * `country_indeed="Brazil"`. This exists so that a future remote/worldwide
+ * pass stops being silently assumed Brazilian.
+ */
+function mapCountry(location: string | null | undefined): string | null {
+  if (!location) return null;
+  const segments = location.split(",");
+  if (segments.length < 2) return null;
+  return normalizeCountry(segments[segments.length - 1]);
 }
 
 /** Present and real on every sampled row (unlike CIEE — docs/11 B1), so no
@@ -58,6 +83,7 @@ export function normalizeIndeedJob(raw: RawPosting, now: Date): Posting | null {
       company: job.company,
       title: job.title,
       location: mapLocation(job.location),
+      country: mapCountry(job.location),
       workMode: mapWorkMode(job.is_remote),
       applicationDeadline: null,
       publishedAt: mapPublishedAt(job.date_posted),

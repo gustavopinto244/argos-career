@@ -42,3 +42,8 @@ logs/
 .vscode/
 .idea/
 .DS_Store
+
+# Per-machine Claude Code settings, and the temp files it writes while
+# saving them. Local tooling state, not project configuration.
+.claude/settings.local.json
+.claude/settings.local.json.tmp.*

@@ -57,6 +57,36 @@ workMode  → remote | hybrid | onsite | unknown
 does not say is a posting that does not say; the pre-filter treats that as a
 candidate for review rather than silently discarding or silently accepting it.
 
+### `country` is a third axis, and it is about hiring, not geography
+
+`location` says where the work happens. `country` (ADR-068) says under whose
+jurisdiction the hiring falls — which is a different question, and the one that
+decides whether an internship is takeable from Brazil at all.
+
+```
+location  → a place, or unknown       "where is the work"
+workMode  → remote | hybrid | onsite  "does the place matter"
+country   → ISO 3166-1 alpha-2, or null   "who can be hired"
+```
+
+Two rules make it usable rather than merely present:
+
+- **Only a real two-letter code is stored.** `normalizeCountry` turns
+  `"Brazil"` into `null`, not `"BR"`. Translating names would need a table
+  covering `"Brasil"`, `"Brésil"` and every misspelling, and would end up
+  guessing — the failure CLAUDE.md §15 exists to prevent.
+- **Null is resolved by the source, not by the posting.** Every source wired
+  up is a Brazilian platform and most state no country, so
+  `criteria.sourceDefaultCountry` supplies it. That is a property of the
+  source, the same standing `location.nationwideSources` already has. A
+  posting neither states nor inherits a country counts as international —
+  the conservative direction, since it then competes for a bounded budget
+  rather than an unbounded one.
+
+`country` is deliberately **not** part of the fingerprint. Identity is
+company + title + city (ADR-007); adding a field would re-collect the whole
+corpus as new.
+
 ### `seniority` is a field, not only a title pattern
 
 The pre-filter blocks by title keyword, which is cheap and catches most cases.
