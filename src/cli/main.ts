@@ -537,6 +537,95 @@ function payloadOf(raw: ExternalRawPosting): unknown {
 }
 
 /**
+ * Route names in a URL path (`jobs`, `view`, `comm`, `e`, `v2`) describe the
+ * shape of a link; the numeric id in `/jobs/view/4451703964/` and anything
+ * opaque describe *which* posting, or worse, which account. Only the former
+ * survives into event metadata.
+ *
+ * The 20-character ceiling is what separates a route name from a token: no
+ * real route segment observed on any source is longer, and an id long enough
+ * to identify something is. Anything failing that test becomes `<opaque>`
+ * rather than being reported.
+ */
+function describePathSegment(segment: string): string {
+  if (/^\d+$/.test(segment)) return "<digits>";
+  if (
+    segment.length <= 20 &&
+    /^[a-z0-9-]+$/i.test(segment) &&
+    /[a-z]/i.test(segment)
+  ) {
+    return segment.toLowerCase();
+  }
+  return "<opaque>";
+}
+
+/** Keys under which a source might carry the posting's link, lowercased —
+ * `payloadOf` hands over whatever the caller sent, and only ADR-029's
+ * LinkedIn path calls its field `link`. */
+const LINK_KEYS = ["link", "url", "joburl", "sourceurl", "applyurl"] as const;
+
+/**
+ * Structural description of a candidate link — never the link itself.
+ *
+ * `docs/11-known-issues.md` B15 was closed on the hypothesis that field
+ * casing was the whole problem, and it was not: real ingest runs kept
+ * discarding 100% of LinkedIn afterwards (2026-08-18 through 2026-08-26, 37
+ * postings). `payloadKeys` proved the casing fix worked — the recorded keys
+ * are `Title`/`Company`/`Link`, which `lowercaseKeys` now accepts — which
+ * leaves exactly one rejection point: `normalizeLinkedinAlertJob`'s
+ * `if (!sourceId) return null`, reached when `deriveSourceIdFromLink` finds
+ * no `/jobs/view/<digits>` in `link`. Confirmed against the current
+ * normalizer: a canonical or `/comm/`-prefixed link normalizes, while an
+ * empty, null, or email-tracking-redirect link does not.
+ *
+ * Which of those the caller actually sends cannot be read from anything
+ * stored, because the value itself must not be stored: a LinkedIn alert
+ * email's tracking URL carries query parameters identifying the recipient's
+ * account, and docs/08's "no personal data" boundary covers event metadata
+ * as much as log lines. `host` and a masked `pathTemplate` are route facts,
+ * not identity; the query string is reported as present or absent and never
+ * read. That is enough to tell `/jobs/view/<digits>` from `/e/v2`, which is
+ * the only question the fix depends on.
+ *
+ * `hasJobsViewPath` answers `deriveSourceIdFromLink`'s exact predicate
+ * directly, so the next real ingest says whether the link is the problem
+ * without anyone having to infer it from `pathTemplate`.
+ */
+export function describeUrlShape(
+  value: unknown,
+): Readonly<Record<string, unknown>> {
+  if (value === undefined) return { kind: "absent" };
+  if (value === null) return { kind: "null" };
+  if (typeof value !== "string") {
+    return { kind: "not-a-string", valueType: typeof value };
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return { kind: "empty" };
+
+  // The predicate `deriveSourceIdFromLink` actually applies, evaluated on the
+  // raw string so it holds even for a value `new URL` cannot parse.
+  const hasJobsViewPath = /\/jobs\/view\/\d+/.test(trimmed);
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return { kind: "unparseable", hasJobsViewPath };
+  }
+  const pathTemplate = url.pathname
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .slice(0, 8)
+    .map(describePathSegment);
+  return {
+    kind: "url",
+    host: url.host,
+    pathTemplate: `/${pathTemplate.join("/")}`,
+    hasQuery: url.search.length > 0,
+    hasJobsViewPath,
+  };
+}
+
+/**
  * Content-free structural summary of a rejected external-ingest item —
  * field *names*, never values (docs/08-observability.md's boundary around
  * log lines applies equally to event metadata). Added after
@@ -546,6 +635,11 @@ function payloadOf(raw: ExternalRawPosting): unknown {
  * a direct read of the caller's actual field-casing bug (found by pasting
  * a real payload) explained it. This is what should have made that
  * diagnosable from the database alone.
+ *
+ * `linkShape` (ADR-064) is the second round of the same lesson: `payloadKeys`
+ * was enough to clear the schema of blame but not to name what replaced it,
+ * because the failing field's *value* — not its name — is what the
+ * normalizer rejects on.
  */
 function describeUnnormalizablePayload(
   raw: ExternalRawPosting,
@@ -563,11 +657,23 @@ function describeUnnormalizablePayload(
   if (payload === null || typeof payload !== "object") {
     return { hasSourceId, envelopeShape, payloadType: typeof payload };
   }
+  const entries = payload as Record<string, unknown>;
+  // Matched case-insensitively for the same reason the schema lowercases its
+  // keys: the real n8n payload sends `Link`, not `link` (B15).
+  const linkKey = Object.keys(entries).find((key) =>
+    (LINK_KEYS as readonly string[]).includes(key.toLowerCase()),
+  );
   return {
     hasSourceId,
     envelopeShape,
     payloadType: "object",
-    payloadKeys: Object.keys(payload as Record<string, unknown>).sort(),
+    payloadKeys: Object.keys(entries).sort(),
+    // Absent, rather than a `kind: "absent"` shape, when the payload carries
+    // no link-ish key at all — `payloadKeys` already says that, and a field
+    // that means two different kinds of nothing is worse than no field.
+    ...(linkKey === undefined
+      ? {}
+      : { linkKey, linkShape: describeUrlShape(entries[linkKey]) }),
   };
 }
 
@@ -675,6 +781,13 @@ export async function executeIngestExternal(
     runsRepo.finish(runId, now(), "failed", {
       collectedCount: postings.length,
       normalizedCount: normalized,
+      // Without this the run row read `collected: N, normalized: 0,
+      // unnormalizable: 0` — arithmetically impossible, and exactly the row
+      // that made LinkedIn's 100% loss look like "the source sent nothing"
+      // for eight days. `executeCollect` has always passed it; this path
+      // computed the same number and dropped it on the floor, surviving only
+      // inside `sourceQueryStats.normalizationRejected`.
+      unnormalizableCount: unnormalizable,
       newCount: isNew,
       alreadySeenCount: alreadySeen,
       truncatedSources,
@@ -703,6 +816,8 @@ export async function executeIngestExternal(
   runsRepo.finish(runId, now(), "success", {
     collectedCount: postings.length,
     normalizedCount: normalized,
+    // See the `failed` path above: same omission, same consequence.
+    unnormalizableCount: unnormalizable,
     newCount: isNew,
     alreadySeenCount: alreadySeen,
     truncatedSources,

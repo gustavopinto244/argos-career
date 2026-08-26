@@ -1770,6 +1770,46 @@ passthrough-only metadata.
 > table — has not happened yet. If it still fails, `payloadKeys` on the
 > next `normalization_rejected` event will say exactly why, closing the
 > loop this entry's own investigation had to do by hand.
+>
+> **It still failed — and `payloadKeys` did its job (2026-08-26, ADR-064).**
+> Two more real ingest runs since the fix, 2026-08-25 (1 item) and
+> 2026-08-26 (3 items), both `normalized: 0`. Running total since this
+> started: **37 items received, 37 rejected, still zero `linkedin` rows.**
+>
+> The casing fix is not the problem and is working. Every rejected item now
+> records `payloadKeys: ["Company","ExtractedAt","Link","Location",
+"ReceivedAt","Subject","Title"]` with `envelopeShape: "flat"` — Title Case,
+> which `lowercaseKeys` accepts, and flat with no `sourceId`, which
+> `payloadOf` handles. Both of this entry's fixes are reached and pass.
+>
+> That leaves one rejection point, and it is now identified rather than
+> hypothesised: `normalizeLinkedinAlertJob`'s `if (!sourceId) return null`,
+> reached when `deriveSourceIdFromLink` finds no `/jobs/view/<digits>` in
+> `link`. Replayed against the current normalizer: a canonical link and a
+> `/comm/`-prefixed tracking link both normalize; an empty, null, or
+> email-redirect (`/e/v2?e=…`) link does not. **So the open question is the
+> `Link` value itself**, which no stored diagnostic could answer, because
+> that value is the field most likely to carry account-identifying tracking
+> parameters — persisting it is exactly what ADR-004 and `docs/08` forbid.
+>
+> ADR-064 adds `linkShape` for this: masked structure (`host`, a
+> `pathTemplate` with ids reduced to `<digits>` and anything opaque masked,
+> `hasQuery` as a bare boolean, and `hasJobsViewPath` — the normalizer's own
+> predicate, evaluated and stored). Enough to tell `/jobs/view/<digits>` from
+> `/e/v2`; not enough to identify anyone.
+>
+> **Two things changed around this entry, both deliberate.** The
+> `sourceFreshnessHours.linkedin: 96` window added above was **removed** —
+> it fired on every collection run, six times a day, about a fact that never
+> changed between runs, and the operator asked for it to stop. And
+> `executeIngestExternal` never passed `unnormalizableCount` to
+> `runsRepo.finish`, so every run row here read `collected: N,
+normalized: 0, unnormalizable: 0` — arithmetically impossible, and a large
+> part of why eight days of total loss read as silence. Both in ADR-064.
+>
+> **This entry stays open, and is now the only thing watching this source.**
+> It closes when a `source = 'linkedin'` row exists in Atlas's `postings`,
+> not before — and the freshness window goes back the same day.
 
 ---
 

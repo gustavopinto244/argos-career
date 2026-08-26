@@ -657,13 +657,25 @@ alerts:
   #              crying over a quiet weekend.
   #   indeed     its own systemd timer runs twice daily; 36h is a little
   #              over one missed run.
-  #   linkedin   the n8n workflow's own schedule (ADR-029) is the user's
-  #              infrastructure, not this repository's -- no fixed cadence
-  #              to measure against. The three real ingest runs observed
-  #              2026-08-18 through 2026-08-23 were 72h and 46h apart, not
-  #              daily (job-alert volume is itself irregular). 96h gives
-  #              slack over the worst gap actually seen rather than an
-  #              assumed schedule.
+  #   linkedin   REMOVED 2026-08-26 (ADR-064). It was 96h, set from the real
+  #              ingest cadence, and it fired correctly -- `linkedin` has
+  #              never delivered a posting, so `evaluateSourceFreshness`'s
+  #              "never delivered" branch matched on every collection run,
+  #              six times a day, about a fact that does not change between
+  #              runs. That is not a signal, it is a metronome, and its cost
+  #              is real: an alert channel nobody can bear to read stops
+  #              working for the outage it exists to catch.
+  #
+  #              This is NOT `catho`'s reasoning below. LinkedIn is deployed
+  #              and n8n is delivering (HTTP 201, 37 items over five runs);
+  #              every one is rejected at normalization instead. Removing
+  #              this line silences the symptom knowingly, and would leave
+  #              the loss invisible if it stood alone -- so it does not:
+  #              `linkShape` (same ADR) makes the next real ingest record
+  #              why, and B15 in docs/11 stays open until a `linkedin` row
+  #              appears in `postings`. Restore this window the day that
+  #              happens; a source that has delivered once can go stale, and
+  #              then the window is a signal again.
   #
   # `catho` is deliberately absent: it has never been deployed (B14), and
   # listing it would alert every cycle about a decision nobody has made yet.
@@ -677,4 +689,3 @@ alerts:
     ciee: 72
     infojobs: 72
     indeed: 36
-    linkedin: 96
