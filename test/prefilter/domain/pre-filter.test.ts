@@ -24,6 +24,7 @@ function baseCriteria(overrides: Partial<Criteria> = {}): Criteria {
     minKeywordAdherence: 0,
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
+    stillListedWithinHours: null,
     maxFutureSkewDays: 1,
     tracks: {
       dev: ["backend", "node"],
@@ -293,6 +294,134 @@ describe("applyPreFilter — maxFutureSkewDays (docs/audit AC-029)", () => {
     );
     expect(outcome.passed).toBe(true);
     expect(outcome.anomalies).toEqual(["published_at_future"]);
+  });
+});
+
+describe("applyPreFilter — stillListedWithinHours (ADR-066)", () => {
+  const HOUR = 60 * 60 * 1000;
+  const DAY = 24 * HOUR;
+  const old = (days: number) => new Date(NOW.getTime() - days * DAY);
+  const seenAgo = (hours: number) => new Date(NOW.getTime() - hours * HOUR);
+
+  it("does nothing when null (the default) — a stale posting is still too_old", () => {
+    const outcome = applyPreFilter(
+      posting({ publishedAt: old(21), firstSeenAt: old(21), lastSeenAt: NOW }),
+      baseCriteria({ maxAgeDays: 7, stillListedWithinHours: null }),
+      [],
+      NOW,
+    );
+    expect(outcome.reason).toBe("too_old");
+  });
+
+  it("rescues a posting the source was still listing, however old its publishedAt", () => {
+    // The real case: "Estágio em TI" (BHG, Rio) — published 21 days ago,
+    // still returned by Indeed 7 hours before this measurement.
+    const outcome = applyPreFilter(
+      posting({
+        publishedAt: old(21),
+        firstSeenAt: old(3),
+        lastSeenAt: seenAgo(7),
+      }),
+      baseCriteria({ maxAgeDays: 7, stillListedWithinHours: 30 }),
+      [],
+      NOW,
+    );
+    expect(outcome.passed).toBe(true);
+  });
+
+  it("still rejects a posting that has vanished from its source", () => {
+    // The 18 of 26 the age rule should keep catching: old *and* gone.
+    const outcome = applyPreFilter(
+      posting({
+        publishedAt: old(21),
+        firstSeenAt: old(21),
+        lastSeenAt: seenAgo(96),
+      }),
+      baseCriteria({ maxAgeDays: 7, stillListedWithinHours: 30 }),
+      [],
+      NOW,
+    );
+    expect(outcome.reason).toBe("too_old");
+  });
+
+  it("outranks undatedBacklogCutoverAt — a posting served up today is not backlog", () => {
+    // The two CIEE "Estágio em Informática" rows: first seen 8 hours before
+    // the cutover instant, still advertised ten days later.
+    const CUTOVER = new Date(NOW.getTime() - 10 * DAY);
+    const outcome = applyPreFilter(
+      posting({
+        publishedAt: null,
+        firstSeenAt: new Date(CUTOVER.getTime() - 8 * HOUR),
+        lastSeenAt: seenAgo(1),
+      }),
+      baseCriteria({
+        maxAgeDays: 7,
+        undatedBacklogCutoverAt: CUTOVER,
+        stillListedWithinHours: 30,
+      }),
+      [],
+      NOW,
+    );
+    expect(outcome.passed).toBe(true);
+  });
+
+  it("treats the window as inclusive at its exact boundary", () => {
+    const at = applyPreFilter(
+      posting({
+        publishedAt: old(21),
+        firstSeenAt: old(21),
+        lastSeenAt: seenAgo(30),
+      }),
+      baseCriteria({ maxAgeDays: 7, stillListedWithinHours: 30 }),
+      [],
+      NOW,
+    );
+    expect(at.passed).toBe(true);
+
+    const justPast = applyPreFilter(
+      posting({
+        publishedAt: old(21),
+        firstSeenAt: old(21),
+        lastSeenAt: new Date(NOW.getTime() - 30 * HOUR - 1),
+      }),
+      baseCriteria({ maxAgeDays: 7, stillListedWithinHours: 30 }),
+      [],
+      NOW,
+    );
+    expect(justPast.reason).toBe("too_old");
+  });
+
+  it("does not let a future lastSeenAt rescue anything — that is clock skew", () => {
+    const outcome = applyPreFilter(
+      posting({
+        publishedAt: old(21),
+        firstSeenAt: old(21),
+        lastSeenAt: new Date(NOW.getTime() + 5 * DAY),
+      }),
+      baseCriteria({ maxAgeDays: 7, stillListedWithinHours: 30 }),
+      [],
+      NOW,
+    );
+    expect(outcome.reason).toBe("too_old");
+  });
+
+  it("rescues from too_old only — it does not override any other rule", () => {
+    // A still-listed posting outside the allowed region is still rejected:
+    // this evidence speaks to whether a posting is open, nothing else.
+    const outcome = applyPreFilter(
+      posting({
+        title: "Estágio em Desenvolvimento Backend",
+        location: { kind: "known", city: "Fortaleza" },
+        workMode: "onsite",
+        publishedAt: old(21),
+        firstSeenAt: old(21),
+        lastSeenAt: seenAgo(1),
+      }),
+      baseCriteria({ maxAgeDays: 7, stillListedWithinHours: 30 }),
+      [],
+      NOW,
+    );
+    expect(outcome.reason).toBe("location_not_allowed");
   });
 });
 

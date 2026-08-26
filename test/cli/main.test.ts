@@ -1104,6 +1104,7 @@ function deliverCriteria(): Criteria {
     minKeywordAdherence: 0,
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
+    stillListedWithinHours: null,
     maxFutureSkewDays: 1,
     tracks: { dev: ["backend"], security: [], automation: [], data: [] },
     trackExclusions: { dev: [], security: [], automation: [], data: [] },

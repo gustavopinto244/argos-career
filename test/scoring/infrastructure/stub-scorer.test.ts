@@ -20,6 +20,7 @@ function criteria(overrides: Partial<Criteria> = {}): Criteria {
     minKeywordAdherence: 0,
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
+    stillListedWithinHours: null,
     maxFutureSkewDays: 1,
     tracks: {
       dev: ["backend"],

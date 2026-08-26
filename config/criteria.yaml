@@ -312,6 +312,35 @@ maxAgeDays: 7
 # that dividing line does not move.
 undatedBacklogCutoverAt: "2026-08-16T12:15:00Z"
 
+# ADR-066. A posting the source was still listing on its most recent sweep is
+# still open, whatever its publication date says — and `lastSeenAt` records
+# exactly that, on every sighting, since ADR-007. The two rules above ask a
+# proxy question ("how long ago was it published"); this one reads the direct
+# answer, and wins over both when it is available.
+#
+# Measured on the real corpus, 2026-08-26, with the real pre-filter: of 26
+# on-track, never-notified Rio-metro postings that `maxAgeDays: 7` rejected,
+# 8 were still being listed by their source and 18 had genuinely vanished.
+# The 8 include "Estágio em TI" (BHG, Rio, published 21d ago, seen 7h ago),
+# "Estagiário de Tecnologia da Informação" (Phoenix Evolution, Rio, 15d/7h),
+# and two CIEE "Estágio em Informática" in Rio seen 54 minutes earlier —
+# those two were being rejected by `undatedBacklogCutoverAt`, having been
+# first seen 8 hours before the cutover instant and advertised ever since.
+#
+# 30 hours, not less: gupy/ciee/infojobs are swept every 4h, but Indeed runs
+# on its own systemd timer twice a day, so a still-listed Indeed posting can
+# legitimately show a 12h-old `lastSeenAt`. 30h clears one full Indeed cycle
+# plus a missed one. Too short and a live posting reads as gone purely
+# because its source has not been swept; too long and the evidence stops
+# meaning "right now". If a source stops collecting entirely, its postings
+# simply age out again — the failure mode is the old behaviour, not a leak.
+#
+# Only ever rescues a posting, never rejects one: a paginating source drops
+# still-open postings out of the collected window (`truncatedSources:
+# ["gupy"]` appears on most real runs), so "not seen recently" is not
+# evidence of closure. null disables this entirely.
+stillListedWithinHours: 30
+
 # How far into the future a source's publishedAt is still trusted
 # (docs/audit AC-029). Beyond this, it is treated as an unreliable date --
 # clock skew, a misparsed format, a bad value like the year 2099 -- not
