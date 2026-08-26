@@ -15,7 +15,7 @@ active postings only 51 are on-track and in-region, and remote postings
 deliver at **21.4% against onsite's 1.4%**, roughly 15×. The question this
 ADR answers is _where the extra remote postings come from_.
 
-Three candidates were considered, in ascending order of cost. **Two were
+Four candidates were considered, in ascending order of cost. **Three were
 measured and rejected**, and recording that is half the value of this ADR:
 the next person to have these ideas should not have to re-run them.
 
@@ -56,6 +56,28 @@ posting** — for no discovery whatsoever.
 Also worth recording, since it validates what already ships: `estagiario ti`
 returns a strict superset of `estagio ti` (5 passing against 2). The two
 existing terms are well chosen.
+
+### Rejected on measurement: tech-specific remote terms on Gupy
+
+The same question, asked of Gupy's remote facet: does a narrower term reach
+remote postings the three generic ones (`estágio`, `estagiário`,
+`estagiária`) miss? Measured the same day:
+
+| term                              | pass | on-track | **new** |
+| --------------------------------- | ---- | -------- | ------- |
+| `estágio desenvolvimento`         | 2    | 2        | **0**   |
+| `estágio dados`                   | 2    | 2        | **0**   |
+| `estágio backend`                 | 0    | —        | 0       |
+| `estágio segurança da informação` | 0    | —        | 0       |
+
+The precision looks excellent — 2 of 2 on-track — and is worth nothing: both
+postings already arrive through the generic terms, which together return 8
+unique on-track remote postings.
+
+**Three sources, one result.** A generic term already exhausts a source's
+remote inventory, because remote listings are few enough that narrowing has
+nothing left to narrow. The lesson generalizes: for a remote query, check
+_overlap_, not yield. A term with perfect precision can still add nothing.
 
 ### The remaining candidate: Indeed has never searched remotely
 

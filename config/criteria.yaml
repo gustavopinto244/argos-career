@@ -90,6 +90,23 @@ collection:
     # already accepts them) if a future query or another source ever
     # surfaces one; only live discovery is missing. Revisit if a real
     # posting in one of these cities is ever seen from another source.
+    # Re-probed against the REMOTE facet 2026-08-26 (ADR-070), asking whether
+    # a tech-specific term reaches remote postings the three generic terms
+    # above do not. It does not. The three generic remote queries return 8
+    # unique on-track postings between them, and every candidate is a subset:
+    #
+    #   estágio desenvolvimento          2 pass, 2 on-track -> 0 NEW
+    #   estágio dados                    2 pass, 2 on-track -> 0 NEW
+    #   estágio backend                  0 pass
+    #   estágio segurança da informação  0 pass
+    #
+    # The precision looks excellent (2 of 2) and is worth nothing: both
+    # postings already arrive via "estágio"/"estagiária". This is the same
+    # result the InfoJobs re-probe gave on the same day -- a generic term
+    # already exhausts a source's remote inventory, because remote listings
+    # are few enough that no narrowing is needed. Check overlap, not yield,
+    # before adding a remote term to any source.
+    #
     # Tech terms, measured with `npm run probe:terms` before being added --
     # the number that decided each one is how many postings survive the
     # pre-filter AND classify onto a real track, not the raw count:
