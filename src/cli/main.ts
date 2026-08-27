@@ -1339,10 +1339,18 @@ export async function executeDeliver(
     }
 
     const admitted = [...national, ...admittedInternational];
-    // Counts what this run will actually attempt to score, so the digest's
-    // own "Após pré-filtro" line and `runs.filtered_count` stay reconcilable
-    // with `scored_count` rather than promising work that was never queued.
-    filteredCount = admitted.length;
+    // How many passed the PRE-FILTER — deliberately not how many this run
+    // went on to score. `runs.filtered_count` and the digest's own "Após
+    // pré-filtro" line have always meant the former, and the international
+    // budget is a later, separate decision: counting post-budget here would
+    // make that label quietly untrue the day the cap first bites, and would
+    // silently redefine a column every past row already uses one way.
+    //
+    // What the budget deferred is not lost from the record — it is one
+    // `deferred` posting_event per posting, which is what makes the gap
+    // between this number and `scored_count` explainable rather than
+    // mysterious.
+    filteredCount = ranked.length;
 
     const scoredEntries: ScoredPosting[] = [];
     const periodBlockedEntries: PeriodBlockedEntry[] = [];

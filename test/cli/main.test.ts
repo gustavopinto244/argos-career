@@ -1677,7 +1677,10 @@ describe("executeDeliver", () => {
       deliverProfile(),
     );
 
-    expect(outcome.filtered).toBe(2);
+    // `filtered` counts what passed the PRE-FILTER, unchanged by the budget:
+    // the label means the same thing it always did, and the gap to `scored`
+    // is what the deferred events explain.
+    expect(outcome.filtered).toBe(5);
     expect(outcome.scored).toBe(2);
 
     const events = new PostingEventsRepository(db).findByRun(outcome.runId);
