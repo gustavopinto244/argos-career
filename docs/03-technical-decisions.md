@@ -74,6 +74,14 @@ revisited on its merits instead of re-argued from memory.
 | [061](adr/061-data-track.md)                                                  | A `data` track, weighted below `dev`/`security`                                     | Accepted   | 2026-08-23 |
 | [062](adr/062-gupy-vacancy-type-filter.md)                                    | Filter Gupy queries by `vacancy_type_internship`                                    | Accepted   | 2026-08-23 |
 | [063](adr/063-infojobs-collector.md)                                          | Add InfoJobs as a source, via listing scrape + detail JSON-LD                       | Accepted   | 2026-08-23 |
+| [064](adr/064-diagnose-link-shape-and-retire-the-linkedin-freshness-alert.md) | Record a rejected link's shape; retire the LinkedIn freshness alert                 | Accepted   | 2026-08-26 |
+| [065](adr/065-retry-telegram-sends-that-provably-never-left.md)               | Retry a Telegram send that provably never left                                      | Accepted   | 2026-08-26 |
+| [066](adr/066-still-listed-outranks-the-age-rules.md)                         | "Still listed by the source" outranks the age rules                                 | Accepted   | 2026-08-26 |
+| [067](adr/067-say-what-failed-and-queue-undeliverable-alerts.md)              | Say what failed, and hold an alert the channel could not carry                      | Accepted   | 2026-08-26 |
+| [068](adr/068-national-postings-uncapped-international-budgeted.md)           | National postings uncapped, international ones budgeted                             | Accepted   | 2026-08-26 |
+| [069](adr/069-probe-any-registered-source.md)                                 | Probe any registered source, and report region and origin                           | Accepted   | 2026-08-26 |
+| [070](adr/070-indeed-remote-pass.md)                                          | An opt-in remote pass for Indeed, after measured dead ends                          | Accepted   | 2026-08-26 |
+| [071](adr/071-nerdin-collector.md)                                            | Add NerdIn as a source; reject RemotIn and Programathor                             | Accepted   | 2026-08-27 |
 
 ## When an ADR is required
 

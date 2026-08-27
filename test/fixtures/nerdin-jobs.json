@@ -1,0 +1,111 @@
+[
+  {
+    "@context": "https://schema.org/",
+    "@type": "JobPosting",
+    "id": "90000001",
+    "title": "Estágio em Suporte / TI",
+    "description": "Atividades: atendimento de chamados, manutenção de estações de trabalho e apoio à equipe de infraestrutura.",
+    "url": "https://www.nerdin.com.br/vaga_emprego/vaga-estagio-suporte-ti-90000001.php",
+    "jobUrl": "https://www.nerdin.com.br/vaga_emprego/vaga-estagio-suporte-ti-90000001.php",
+    "directApply": true,
+    "hiringOrganization": {
+      "@type": "Organization",
+      "name": "Empresa Fictícia Um",
+      "sameAs": "https://www.nerdin.com.br"
+    },
+    "applicantLocationRequirements": { "@type": "Country", "name": "BR" },
+    "identifier": {
+      "@type": "PropertyValue",
+      "name": "Nerdin",
+      "value": "90000001"
+    },
+    "datePosted": "2026-08-24T00:00:00",
+    "validThrough": "2026-09-23T23:59:59",
+    "employmentType": ["FULL_TIME"],
+    "jobLocation": {
+      "@type": "Place",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Novo Hamburgo",
+        "addressCountry": "BR",
+        "addressRegion": "RS"
+      }
+    },
+    "occupationalCategory": "Suporte / ITIL / Sistemas / Estagio",
+    "industry": "Information Technology",
+    "isRemoteQuery": false
+  },
+  {
+    "@context": "https://schema.org/",
+    "@type": "JobPosting",
+    "id": "90000002",
+    "title": "Estágio ou Desenvolvedor(a) Júnior",
+    "description": "Projetos já em andamento, com acompanhamento próximo. Stack: JavaScript e SQL.",
+    "url": "https://www.nerdin.com.br/vaga_emprego/vaga-estagio-dev-90000002.php",
+    "jobUrl": "https://www.nerdin.com.br/vaga_emprego/vaga-estagio-dev-90000002.php",
+    "directApply": true,
+    "hiringOrganization": {
+      "@type": "Organization",
+      "name": "Empresa Fictícia Dois",
+      "sameAs": "https://www.nerdin.com.br"
+    },
+    "applicantLocationRequirements": { "@type": "Country", "name": "BR" },
+    "identifier": {
+      "@type": "PropertyValue",
+      "name": "Nerdin",
+      "value": "90000002"
+    },
+    "datePosted": "2026-08-02T00:00:00",
+    "validThrough": "2026-09-01T23:59:59",
+    "employmentType": ["FULL_TIME"],
+    "jobLocationType": "TELECOMMUTE",
+    "jobLocation": {
+      "@type": "Place",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Home Office",
+        "addressCountry": "BR",
+        "addressRegion": "HO"
+      }
+    },
+    "occupationalCategory": "Desenvolvimento / Sistemas / Estagio",
+    "industry": "Information Technology",
+    "isRemoteQuery": true
+  },
+  {
+    "@context": "https://schema.org/",
+    "@type": "JobPosting",
+    "id": "90000003",
+    "title": "Estagiário de TI (Help Desk)",
+    "description": "<p>Rotina de <strong>help desk</strong>.</p><ul><li>Chamados N1</li><li>Inventário</li></ul>Ambiente &amp; equipe colaborativa.",
+    "url": "https://www.nerdin.com.br/vaga_emprego/vaga-estagiario-ti-90000003.php",
+    "jobUrl": "https://www.nerdin.com.br/vaga_emprego/vaga-estagiario-ti-90000003.php",
+    "directApply": true,
+    "hiringOrganization": {
+      "@type": "Organization",
+      "name": "Empresa Fictícia Três",
+      "sameAs": "https://www.nerdin.com.br"
+    },
+    "applicantLocationRequirements": { "@type": "Country", "name": "BR" },
+    "identifier": {
+      "@type": "PropertyValue",
+      "name": "Nerdin",
+      "value": "90000003"
+    },
+    "datePosted": "2026-08-24T00:00:00",
+    "validThrough": "2026-09-23T23:59:59",
+    "employmentType": "FULL_TIME",
+    "jobLocation": {
+      "@type": "Place",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Macaé",
+        "addressCountry": "BR",
+        "addressRegion": "RJ"
+      }
+    },
+    "occupationalCategory": "Suporte / Office / Sistemas / Estagio",
+    "industry": "Information Technology",
+    "isRemoteQuery": false
+  }
+]

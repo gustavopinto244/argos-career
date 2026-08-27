@@ -202,6 +202,35 @@ collection:
     # queries, at two HTTP requests per posting, for no discovery at all.
     # Also measured, and it validates what ships: `estagiario ti` returns a
     # strict superset of `estagio ti` (5 passing against 2).
+    # --- NerdIn (ADR-071), added 2026-08-27 --------------------------------
+    # An IT-only Brazilian board. Its detail pages carry a complete
+    # schema.org JobPosting, including `jobLocationType: TELECOMMUTE` and
+    # `addressCountry`, so `workMode` and `country` are read from the source
+    # rather than inferred from which facet the query used.
+    #
+    # ONE query, and the measurement is why. `npm run probe:terms --source
+    # nerdin --max 30`, against the live site:
+    #
+    #   term          scope        returned  passes  on-track  in-region
+    #   estagi        site-wide           9       2         2          2
+    #   estagio       site-wide           6       1         1          1
+    #   estagiario    site-wide           3       1         1          1
+    #   estagi        home-office         4       2         2          2
+    #   estagi        Rio de Janeiro      1       0         0          0
+    #
+    # `estagi` is the prefix that unions `estagio` and `estagiario` (9 = 6 +
+    # 3, and it reaches one posting `estagio` alone misses), so it replaces
+    # both. The home-office variant is NOT added: it returns 4 and yields
+    # the same 2 the site-wide query already contains -- the redundancy test
+    # ADR-070 used to reject three other candidate queries. Rio de Janeiro
+    # is genuinely empty here, not filtered wrong: `busca_local` was
+    # verified honoured (194 -> 8 for Rio, -> 0 for a nonexistent city).
+    #
+    # `maxResults: 20` because each posting costs a second request (listing
+    # -> detail), the same cost model InfoJobs has.
+    - source: nerdin
+      jobName: estagi
+      maxResults: 20
     # Niterói/São Gonçalo not yet measured for this source -- cheap to add
     # (a city-slug change only) once probed with the same discipline as
     # Rio de Janeiro above. Not an oversight; deferred pending a real
@@ -425,6 +454,7 @@ sourceDefaultCountry:
   gupy: BR
   ciee: BR
   infojobs: BR
+  nerdin: BR
   solides: BR
   indeed: BR
   catho: BR
