@@ -520,6 +520,71 @@ One per pull request, each meeting the M3 criteria:
       it (ADR-008). Workflow exported and committed to `n8n/`; core verified
       unaffected with n8n stopped
 
+## Next up — agreed 2026-08-27
+
+Three things, in the order they unblock each other. None is a milestone of
+its own; they are the work that turns what already ships into something
+exercised.
+
+### 1. Watch the features that just landed, for a few days
+
+Eleven PRs merged on 2026-08-26/27 changed what reaches the digest, and
+several are verified only against one run. What needs a real week before it
+can be called done:
+
+- **Cost.** The 27/08 run scored 18 and cost US$0.023 against a 10-day
+  baseline of 10.2 scored and US$0.005. Cost per _delivered_ posting went
+  from US$0.00138 to US$0.00194 — on n=1, with 3 scoring failures in that
+  run, so it is not conclusive. ADR-070 Amendment 3 roughly doubled what
+  Indeed sends to the pre-filter, so the next runs are the real measurement.
+  National scoring is uncapped by decision (ADR-068); this is monitored, not
+  contained.
+- **`stillListedWithinHours: 30`** (ADR-066) has no steady-state
+  observation, and its accepted cost is a 67-day-old still-listed posting
+  getting scored. If zombies turn out to be common, that is when an age
+  ceiling gets argued for — with a measurement, not a guess.
+- **NerdIn** (ADR-071) has 2 postings in the corpus and one collection
+  behind it. `npm run report:supply -- --weeks 2` decides whether it stays;
+  `onTrackInRegion: 0` means parking the query, as Sólides was.
+- **The international path** (ADR-068) has never met a real foreign posting.
+  It is unit-tested only, and `maxInternationalPerRun` is still `null`.
+
+### 2. Run n8n on Atlas
+
+Today n8n lives on the operator's own infrastructure, off Atlas, and its
+only job is feeding LinkedIn alert emails into `/runs/collect/external`.
+
+**Why this is next, concretely:** LinkedIn has never landed a posting —
+37 items received across five real ingest runs, 37 rejected (docs/11 B15).
+The cause is narrowed to one field: `normalizeLinkedinAlertJob` rejects when
+`deriveSourceIdFromLink` finds no `/jobs/view/<digits>` in `link`. ADR-064
+added `linkShape` so the next real delivery records the masked shape of that
+value, but **no new delivery has arrived since**. With n8n on Atlas the
+workflow's actual output becomes inspectable directly, which collapses a
+wait-and-see into a look-and-fix.
+
+Worth carrying over: ADR-008 places n8n behind `N8nCollector` as a P3
+long-tail source and **never as the orchestrator, never on the critical
+path**. Moving where it runs does not change that.
+
+### 3. Give Hermes on Aquila something to do
+
+M9 built the API and MCP server for exactly this and left the consuming half
+unchecked (see the M9 deferral above): there was no second tailnet machine
+to drive a real cross-machine call from. **There is now** — `aquila` is on
+the tailnet.
+
+This is what makes ADR-017's boundary real rather than theoretical: a fixed
+Bearer key over Tailscale, timing-safe compared, every route authenticated
+by default. The six MCP tools (`get_health`, `list_runs`, `get_run`,
+`run_collect`, `run_dedup`, `run_deliver`) have never been called by a real
+consumer.
+
+The constraint from CLAUDE.md §10 stands and is the point: **Hermes is a
+consumer, never the critical path.** The nightly digest goes out through the
+direct Telegram client and must keep working with Hermes — and Aquila —
+entirely down.
+
 ## Where question 3 lands
 
 "How should I present my profile?" is not a milestone of its own — it is output
