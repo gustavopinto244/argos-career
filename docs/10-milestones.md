@@ -495,6 +495,15 @@ One per pull request, each meeting the M3 criteria:
       **Not yet run for real** — wired and unit-tested against a curated
       fixture, same honest status this project records for every source
       before its own first live collection cycle
+- [x] NerdIn, an IT-only Brazilian board (ADR-071) — listing scrape +
+      detail JSON-LD, the same shape as InfoJobs, but with
+      `jobLocationType` and `addressCountry` stated by the source so
+      `workMode` and `country` are read rather than inferred. One
+      measured query (`estagi`, 9 returned / 2 passing). RemotIn and
+      Programathor were investigated in the same pass and rejected —
+      robots.txt and 100%-expired stock respectively. **Not yet run for
+      real**, the same honest status every source carries before its
+      first live collection cycle
 - [ ] `N8nCollector` behind `CollectorPort`, with one long-tail source proving
       it (ADR-008). Workflow exported and committed to `n8n/`; core verified
       unaffected with n8n stopped

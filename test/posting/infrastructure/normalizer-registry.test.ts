@@ -47,6 +47,7 @@ describe("normalizerFor", () => {
       "indeed",
       "infojobs",
       "linkedin",
+      "nerdin",
       "solides",
     ]);
   });

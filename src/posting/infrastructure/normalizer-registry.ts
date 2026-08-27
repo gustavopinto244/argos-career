@@ -5,6 +5,7 @@ import { normalizeCieeVaga } from "./ciee-normalizer";
 import { normalizeGupyJob } from "./gupy-normalizer";
 import { normalizeIndeedJob } from "./indeed-normalizer";
 import { normalizeInfoJobsJob } from "./infojobs-normalizer";
+import { normalizeNerdinJob } from "./nerdin-normalizer";
 import { normalizeLinkedinAlertJob } from "./linkedin-alert-normalizer";
 import { normalizeSolidesJob } from "./solides-normalizer";
 
@@ -43,6 +44,7 @@ const NORMALIZERS: ReadonlyMap<string, Normalizer> = new Map([
   ["solides", normalizeSolidesJob],
   ["catho", normalizeCathoJob],
   ["infojobs", normalizeInfoJobsJob],
+  ["nerdin", normalizeNerdinJob],
 ]);
 
 /**
