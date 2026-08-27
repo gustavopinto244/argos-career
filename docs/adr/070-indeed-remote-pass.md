@@ -161,3 +161,50 @@ Two dead ends are recorded above rather than merely abandoned. If remote
 supply still looks thin after this, the next step is a new source (the plan's
 Phase 3), not another pass at Sólides or InfoJobs — both now have real
 numbers saying no.
+
+## Amendment 1 — measured against real Indeed traffic, and enabled
+
+**2026-08-26**, the same day. The ADR above shipped saying the remote pass
+"has not been measured against real Indeed traffic" and that the default-off
+was what made measuring a deliberate step. That step was taken immediately:
+the image was rebuilt on Atlas and run with `DRY_RUN=1 INCLUDE_REMOTE=1`
+against the live source.
+
+**The remote pass reached 15 postings across five terms**, where the location
+passes reached 229:
+
+| pass                                       | returned | on-track, in-region |
+| ------------------------------------------ | -------- | ------------------- |
+| `estagio ti [remote]`                      | 5        | 3                   |
+| `estagio desenvolvimento [remote]`         | 5        | 1                   |
+| `estagio seguranca da informacao [remote]` | 4        | 1                   |
+| `estagio suporte [remote]`                 | 1        | 0                   |
+| `estagio infraestrutura [remote]`          | 0        | 0                   |
+
+The number that decides it is the overlap check the three rejected candidates
+failed. Of the on-track postings, the location passes yield 17 and the remote
+passes 3 — and **all 3 are postings the location passes do not return**:
+
+- `Node.js Trainee Developer - Remote` (BairesDev)
+- `Desenvolvedor React Trainee - Trabalho Remoto` (BairesDev)
+- `Estágio de TI (Desenvolvimento)` (Applus+ Brasil)
+
+All three carry `country: "BR"`, so they land in ADR-068's uncapped national
+bucket, and the first two are squarely the profile's `dev` track.
+
+This is the first of the four candidates to survive its own overlap check.
+`INCLUDE_REMOTE=1` is therefore enabled in Atlas's
+`collectors/indeed/.env`. It stays off by default in the repository: the
+measurement justifies it for _this_ deployment against _these_ terms, not as
+a property of the collector.
+
+One correction to the ADR body while it is fresh: `probe:indeed` iterated
+`dump.terms` rather than `perTerm`'s keys, so it reported only the location
+passes and showed none of the above. Fixed in the same change — a measurement
+tool that silently omits the thing being measured is worse than no tool.
+
+Worth noting against `collect.py`'s own term comments, which recorded
+BairesDev's trainee postings as real dev-track hits that "all failed
+too_old": under the remote facet they pass. Either the listings are fresher
+here or ADR-066's still-listed rescue is carrying them — not disambiguated,
+and not load-bearing for this decision.
