@@ -208,3 +208,31 @@ BairesDev's trainee postings as real dev-track hits that "all failed
 too_old": under the remote facet they pass. Either the listings are fresher
 here or ADR-066's still-listed rescue is carrying them — not disambiguated,
 and not load-bearing for this decision.
+
+## Amendment 2 — the flag was inert until the systemd unit forwarded it
+
+**2026-08-26**, minutes after Amendment 1. Enabling `INCLUDE_REMOTE=1` in
+Atlas's `.env` and starting the service produced
+`179 unique rows across 5 pass(es) over 5 term(s)` — five passes, not ten,
+and no remote pass at all.
+
+`argos-indeed-collect.service` forwards environment into the container by
+listing each name explicitly (`-e SEARCH_TERMS`, `-e LOCATION`, …). A bare
+`-e NAME` forwards that variable from `EnvironmentFile`; **a name absent from
+the list is silently dropped regardless of what `.env` contains.**
+`INCLUDE_REMOTE` was added to `collect.py` and `.env.example` and not to the
+unit, so the flag was inert.
+
+This is the same shape as ADR-063's `CollectionQuerySchema` gap — a config
+key that looks set, is accepted without complaint, and never reaches the code
+that reads it. Two independent surfaces have to agree, and nothing checks
+that they do.
+
+Fixed by adding `-e INCLUDE_REMOTE` to the unit, with a comment above the
+list saying that a name missing from it is ignored no matter what `.env`
+says, so the next variable added has the warning in front of it.
+
+**What made it visible was the pass count in the log line** — "5 pass(es)
+over 5 term(s)" instead of "10 pass(es) … + a remote pass". That line was
+added in the ADR body's own change for readability, and it is the only
+reason this was caught in minutes rather than at the next quiet digest.

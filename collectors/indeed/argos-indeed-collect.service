@@ -20,12 +20,20 @@ Description=Collect Indeed postings via jobspy and ingest into argos-career
 [Service]
 Type=oneshot
 EnvironmentFile=%h/apps/argos-career/app/collectors/indeed/.env
+# Every variable the container reads must be listed here explicitly. A bare
+# `-e NAME` forwards it from EnvironmentFile; a name missing from this list
+# is silently ignored no matter what .env says -- which is exactly what
+# happened to INCLUDE_REMOTE on 2026-08-26 (ADR-070 Amendment 2): the flag
+# was set in .env, the run reported five passes instead of ten, and nothing
+# anywhere said why. Add the name here in the same change that adds it to
+# collect.py.
 ExecStart=/usr/bin/docker run --rm \
   -e SEARCH_TERMS \
   -e SEARCH_TERM \
   -e LOCATION \
   -e COUNTRY_INDEED \
   -e RESULTS_WANTED \
+  -e INCLUDE_REMOTE \
   -e ARGOS_API_URL \
   -e ARGOS_INGEST_API_KEY \
   argos-indeed-collector:local
