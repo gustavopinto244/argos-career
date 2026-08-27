@@ -832,6 +832,21 @@ alerts:
   # runs and listing it would alert about a decision already made, the same
   # reasoning that keeps `catho` off this list. An unlisted source is
   # simply not checked.
+  #
+  # `nerdin` is deliberately absent, added 2026-08-27 (ADR-071) and due for
+  # a decision on or after 2026-09-03. The source went live with 9 postings
+  # in stock, so its real publication cadence was unknown, and a window
+  # guessed on day one would alert about a source behaving normally -- the
+  # exact noise ADR-064 had to remove for LinkedIn. Derive it the way every
+  # window above was, from a measured gap:
+  #
+  #   SELECT date(first_seen_at/1000,'unixepoch') d, COUNT(*)
+  #   FROM postings WHERE source='nerdin' GROUP BY d ORDER BY d;
+  #
+  # Take the longest real gap between days that produced a posting, add
+  # slack for one missed collection cycle, round up. If a week shows nerdin
+  # delivering nothing at all, park the query (as solides was) rather than
+  # adding a freshness window to a dead source.
   sourceFreshnessHours:
     gupy: 72
     ciee: 72
