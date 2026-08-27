@@ -501,9 +501,21 @@ One per pull request, each meeting the M3 criteria:
       `workMode` and `country` are read rather than inferred. One
       measured query (`estagi`, 9 returned / 2 passing). RemotIn and
       Programathor were investigated in the same pass and rejected —
-      robots.txt and 100%-expired stock respectively. **Not yet run for
-      real**, the same honest status every source carries before its
-      first live collection cycle
+      robots.txt and 100%-expired stock respectively. First real collection
+      ran 2026-08-27: 9 returned, 0 schema-rejected, 2 persisted, 7 dropped
+      by the collection recency window (a new source gets `backfillDays: 7`,
+      and those were published 02–07/08)
+- [ ] **NerdIn: set `alerts.sourceFreshnessHours.nerdin`** — due on or after
+      **2026-09-03**, deliberately left unset at first (ADR-071). An unlisted
+      source is simply not checked, and with 9 postings in live stock the
+      real publication cadence was unknown; a window guessed on day one would
+      alert on a source behaving normally, which is the noise ADR-064 had to
+      remove for LinkedIn. Set it from a week of observed `first_seen_at`
+      gaps, not from a wish — measure the longest real gap and add slack for
+      one missed cycle, the way `gupy: 72` and `indeed: 36` were each
+      derived. If a week of runs shows NerdIn delivering nothing at all, the
+      decision is to park the query (as Sólides was), not to add a window to
+      a dead source
 - [ ] `N8nCollector` behind `CollectorPort`, with one long-tail source proving
       it (ADR-008). Workflow exported and committed to `n8n/`; core verified
       unaffected with n8n stopped
