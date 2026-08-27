@@ -458,16 +458,21 @@ export const deliveryOperations = sqliteTable(
  * the alert in time rather than in space: it is redelivered on the next
  * cycle whose send succeeds, late but not lost.
  *
- * `text` is unique, and that is the dedup mechanism, not an accident. The
- * conditions that alert here are level-triggered — "source X has delivered
- * nothing", "no scoreAndDeliver run today" — so a channel that is down for a
- * day would otherwise queue the same sentence six times over. One row with
- * `occurrences` counts them instead.
+ * **`alertKey` is unique, not `text`** (ADR-067 Amendment 1). Deduplicating
+ * on the message was wrong for exactly the alerts most likely to repeat: half
+ * of them embed a value that changes every cycle — `staleForHours` grows,
+ * `runId` differs per run — so a channel down for two days queued a dozen
+ * near-identical rows per source and would have replayed them all as stale
+ * news. The key names the *condition and its subject*; the row keeps the
+ * newest text, so what finally arrives states the situation as of the last
+ * time it was true.
  */
 export const pendingAlerts = sqliteTable(
   "pending_alerts",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    // Stable identity for the condition — see `Alert.key`.
+    alertKey: text("alert_key").notNull(),
     text: text("text").notNull(),
     firstQueuedAt: integer("first_queued_at", {
       mode: "timestamp_ms",
@@ -479,7 +484,7 @@ export const pendingAlerts = sqliteTable(
     // path does not branch on it.
     lastError: text("last_error"),
   },
-  (table) => [uniqueIndex("pending_alerts_text_unique").on(table.text)],
+  (table) => [uniqueIndex("pending_alerts_key_unique").on(table.alertKey)],
 );
 
 /** One stable, ordered checkpoint per Telegram message. Confirmed chunks are

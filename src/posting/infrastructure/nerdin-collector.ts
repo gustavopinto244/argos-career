@@ -223,6 +223,10 @@ export class NerdinCollector implements CollectorPort {
       for (const card of fresh) seenIds.add(card.id);
       cards.push(...fresh);
 
+      // Checked before the loop condition can exit on `maxResults`, not
+      // after: a board holding exactly `maxResults` matches returns one
+      // short-or-equal page and has dropped nothing, but the loop would
+      // leave `exhausted` false and report `truncated` on every single run.
       if (pageCards.length < EXPECTED_PAGE_SIZE) {
         exhausted = true;
         break;

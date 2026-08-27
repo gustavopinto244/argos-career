@@ -4,6 +4,9 @@ import { pendingAlerts } from "./schema";
 
 export type PendingAlertRow = typeof pendingAlerts.$inferSelect;
 
+/** Hard ceiling on the queue, independent of dedup — see `trim`. */
+const MAX_QUEUED_ALERTS = 50;
+
 /**
  * The queue of alerts whose send failed, held until the channel recovers
  * (ADR-067, `docs/11-known-issues.md` B20).
@@ -28,10 +31,11 @@ export class PendingAlertsRepository {
    * `firstQueuedAt` is written once and never moved: it is what lets the
    * redelivered message say how long the condition has been unreported.
    */
-  queue(text: string, now: Date, error: string | null): void {
+  queue(alertKey: string, text: string, now: Date, error: string | null): void {
     this.db
       .insert(pendingAlerts)
       .values({
+        alertKey,
         text,
         firstQueuedAt: now,
         lastQueuedAt: now,
@@ -39,14 +43,38 @@ export class PendingAlertsRepository {
         lastError: error,
       })
       .onConflictDoUpdate({
-        target: pendingAlerts.text,
+        target: pendingAlerts.alertKey,
         set: {
+          // The newest wording wins. These messages quote live numbers
+          // ("stale for 27h"), so replaying the first one would report a
+          // situation that has since moved on.
+          text,
           lastQueuedAt: now,
           occurrences: sql`${pendingAlerts.occurrences} + 1`,
           lastError: error,
         },
       })
       .run();
+    this.trim();
+  }
+
+  /**
+   * Bounds the table. Dedup by key already caps it at the number of distinct
+   * conditions the system can raise, which is small and fixed — but that is
+   * a property of today's alert set, not a guarantee, and an alert whose key
+   * ever embeds something high-cardinality would otherwise grow it without
+   * limit. Keeps the oldest, which are the ones most likely to describe
+   * something still broken.
+   */
+  private trim(): void {
+    this.db.run(sql`
+      DELETE FROM ${pendingAlerts}
+      WHERE id NOT IN (
+        SELECT id FROM ${pendingAlerts}
+        ORDER BY ${pendingAlerts.firstQueuedAt} ASC
+        LIMIT ${MAX_QUEUED_ALERTS}
+      )
+    `);
   }
 
   /**

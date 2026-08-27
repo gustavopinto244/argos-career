@@ -163,7 +163,9 @@ resumeVariants:
     const service = moduleRef.get(SchedulerService);
     const internals = service as unknown as {
       notifier: { sendText: (text: string) => Promise<unknown> };
-      sendAlerts: (alerts: readonly { text: string }[]) => Promise<void>;
+      sendAlerts: (
+        alerts: readonly { text: string; key: string }[],
+      ) => Promise<void>;
     };
 
     // docs/11 B20: alerting shares the digest's channel, so when Telegram is
@@ -176,7 +178,9 @@ resumeVariants:
           error: { message: "Telegram request failed" },
         }),
     };
-    await internals.sendAlerts([{ text: "No digest sent today." }]);
+    await internals.sendAlerts([
+      { text: "No digest sent today.", key: "run:missed" },
+    ]);
 
     const queue = new PendingAlertsRepository(
       createDatabase(process.env.DATABASE_PATH!),
@@ -215,14 +219,19 @@ resumeVariants:
     const service = moduleRef.get(SchedulerService);
     const internals = service as unknown as {
       notifier: { sendText: (text: string) => Promise<unknown> };
-      sendAlerts: (alerts: readonly { text: string }[]) => Promise<void>;
+      sendAlerts: (
+        alerts: readonly { text: string; key: string }[],
+      ) => Promise<void>;
     };
 
     internals.notifier = {
       sendText: () =>
         Promise.resolve({ ok: false, error: { message: "still down" } }),
     };
-    await internals.sendAlerts([{ text: "alert one" }, { text: "alert two" }]);
+    await internals.sendAlerts([
+      { text: "alert one", key: "k:one" },
+      { text: "alert two", key: "k:two" },
+    ]);
 
     const queue = new PendingAlertsRepository(
       createDatabase(process.env.DATABASE_PATH!),

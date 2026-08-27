@@ -29,7 +29,12 @@ afterEach(() => {
 
 describe("PendingAlertsRepository (ADR-067)", () => {
   it("queues an undeliverable alert and lists it back", () => {
-    repository.queue("No digest sent today.", NOW, "Telegram request failed");
+    repository.queue(
+      "run:missed",
+      "No digest sent today.",
+      NOW,
+      "Telegram request failed",
+    );
 
     const [queued] = repository.list(10);
     expect(queued?.text).toBe("No digest sent today.");
@@ -42,8 +47,18 @@ describe("PendingAlertsRepository (ADR-067)", () => {
     // The alerting conditions are level-triggered (docs/08) — the same
     // sentence is re-derived every cycle the outage lasts. Without this,
     // a day-long outage queues it six times and redelivery spams it back.
-    repository.queue("Source gupy has delivered nothing.", NOW, "down");
-    repository.queue("Source gupy has delivered nothing.", LATER, "still down");
+    repository.queue(
+      "source:stale:gupy",
+      "Source gupy stale for 8h.",
+      NOW,
+      "down",
+    );
+    repository.queue(
+      "source:stale:gupy",
+      "Source gupy stale for 12h.",
+      LATER,
+      "still down",
+    );
 
     const rows = repository.list(10);
     expect(rows).toHaveLength(1);
@@ -52,8 +67,8 @@ describe("PendingAlertsRepository (ADR-067)", () => {
   });
 
   it("keeps firstQueuedAt at the original raise, so lateness stays measurable", () => {
-    repository.queue("No digest sent today.", NOW, null);
-    repository.queue("No digest sent today.", LATER, null);
+    repository.queue("run:missed", "No digest sent today.", NOW, null);
+    repository.queue("run:missed", "No digest sent today.", LATER, null);
 
     const [queued] = repository.list(10);
     expect(queued?.firstQueuedAt.toISOString()).toBe(NOW.toISOString());
@@ -61,8 +76,8 @@ describe("PendingAlertsRepository (ADR-067)", () => {
   });
 
   it("lists oldest first, so the longest-waiting alert is not starved", () => {
-    repository.queue("second", LATER, null);
-    repository.queue("first", NOW, null);
+    repository.queue("k:second", "second", LATER, null);
+    repository.queue("k:first", "first", NOW, null);
 
     expect(repository.list(10).map((row) => row.text)).toEqual([
       "first",
@@ -72,14 +87,19 @@ describe("PendingAlertsRepository (ADR-067)", () => {
 
   it("caps how many it returns, bounding a recovery cycle", () => {
     for (let i = 0; i < 8; i++) {
-      repository.queue(`alert ${i}`, new Date(NOW.getTime() + i * 1000), null);
+      repository.queue(
+        `k:${i}`,
+        `alert ${i}`,
+        new Date(NOW.getTime() + i * 1000),
+        null,
+      );
     }
     expect(repository.list(5)).toHaveLength(5);
     expect(repository.count()).toBe(8);
   });
 
   it("removes a row once its alert is delivered", () => {
-    repository.queue("delivered later", NOW, null);
+    repository.queue("k:one", "delivered later", NOW, null);
     const [queued] = repository.list(10);
 
     repository.remove(queued!.id);
@@ -91,5 +111,48 @@ describe("PendingAlertsRepository (ADR-067)", () => {
   it("counts zero on an empty queue rather than throwing", () => {
     expect(repository.count()).toBe(0);
     expect(repository.list(10)).toEqual([]);
+  });
+
+  it("dedups a level-triggered alert whose wording changes each cycle", () => {
+    // The defect this key exists for: `evaluateSourceFreshness` embeds a
+    // growing `staleForHours` and an ISO timestamp, so deduplicating on the
+    // MESSAGE deduplicated nothing — a two-day outage queued a dozen
+    // near-identical rows per source and would have replayed them all as
+    // stale news.
+    repository.queue("source:stale:indeed", "indeed stale for 27h.", NOW, null);
+    repository.queue(
+      "source:stale:indeed",
+      "indeed stale for 31h.",
+      LATER,
+      null,
+    );
+    repository.queue(
+      "source:stale:indeed",
+      "indeed stale for 35h.",
+      LATER,
+      null,
+    );
+
+    const rows = repository.list(10);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.occurrences).toBe(3);
+    // The newest wording survives — replaying "27h" after recovery would
+    // report a situation that has since moved on.
+    expect(rows[0]?.text).toBe("indeed stale for 35h.");
+    expect(rows[0]?.firstQueuedAt.toISOString()).toBe(NOW.toISOString());
+  });
+
+  it("bounds the table even if keys ever became high-cardinality", () => {
+    for (let i = 0; i < 60; i++) {
+      repository.queue(
+        `k:${i}`,
+        `alert ${i}`,
+        new Date(NOW.getTime() + i),
+        null,
+      );
+    }
+    expect(repository.count()).toBe(50);
+    // The oldest are kept — they describe what has been broken longest.
+    expect(repository.list(1)[0]?.text).toBe("alert 0");
   });
 });

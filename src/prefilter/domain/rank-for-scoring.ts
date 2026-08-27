@@ -33,8 +33,22 @@ export function rankForScoring(
   postings: readonly Posting[],
   criteria: Criteria,
 ): Posting[] {
+  // ADR-066 established `lastSeenAt` as the authoritative "still open"
+  // evidence, outranking the date estimates — and the postings it exists to
+  // rescue are old by publication and fresh by sighting. Ranking on the
+  // publication date alone sent exactly those to the bottom of the batch,
+  // making them the first casualties of a cancel, a provider failure or the
+  // international cap. The two rules disagreed about which signal means
+  // "still open"; this makes them agree.
+  //
+  // The later of the two: a posting the source served up an hour ago is
+  // live now, whatever its stated date, and one with a recent publication
+  // date is unaffected because its own date already wins.
   const recencyOf = (posting: Posting): number =>
-    (posting.publishedAt ?? posting.firstSeenAt).getTime();
+    Math.max(
+      (posting.publishedAt ?? posting.firstSeenAt).getTime(),
+      posting.lastSeenAt.getTime(),
+    );
 
   const weightOf = (posting: Posting): number => {
     const tracks = classifyTrack(

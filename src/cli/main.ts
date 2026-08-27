@@ -565,11 +565,14 @@ function failureMessage(cause: unknown): string {
  */
 function describePathSegment(segment: string): string {
   if (/^\d+$/.test(segment)) return "<digits>";
-  if (
-    segment.length <= 20 &&
-    /^[a-z0-9-]+$/i.test(segment) &&
-    /[a-z]/i.test(segment)
-  ) {
+  // Letters and hyphens only, and short. Length alone was the wrong
+  // discriminator: many tracking tokens are short base62, so a segment like
+  // `2Fabcd1234efgh` passed the old ≤20-character alphanumeric test and was
+  // stored verbatim — the exact opposite of what this function's own
+  // contract promises (ADR-064: the value must not be stored). Requiring no
+  // digits is what actually separates a route name (`jobs`, `view`, `comm`)
+  // from an identifier.
+  if (segment.length <= 20 && /^[a-z-]+$/i.test(segment)) {
     return segment.toLowerCase();
   }
   return "<opaque>";

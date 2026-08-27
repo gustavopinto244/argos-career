@@ -16,6 +16,23 @@ import {
  */
 export interface Alert {
   readonly text: string;
+  /**
+   * A stable identity for "this condition", independent of the numbers the
+   * message happens to quote (ADR-067 Amendment 1).
+   *
+   * `text` cannot serve as that identity: half these alerts embed a value
+   * that changes every cycle — `staleForHours` grows, `runId` differs per
+   * run — so deduplicating the queue on `text` deduplicates nothing for
+   * exactly the alerts most likely to repeat during an outage. A channel
+   * down for two days would enqueue a dozen near-identical rows per source
+   * and then replay them all as stale news.
+   *
+   * Keys are coarse on purpose: one per condition-and-subject, not per
+   * occurrence. Re-raising an alert replaces the queued text with the newer
+   * one, so what finally arrives states the situation as of the last time
+   * it was true, not as of the first.
+   */
+  readonly key: string;
 }
 
 /**
@@ -41,12 +58,14 @@ export function evaluateCollectionHealth(
   if (lastN.every((r) => r.outcome === "success" && r.collectedCount === 0)) {
     alerts.push({
       text: `gupy: ${threshold} consecutive collection runs found zero postings.`,
+      key: "collection:empty",
     });
   }
 
   if (lastN.every((r) => r.outcome === "failed")) {
     alerts.push({
       text: `gupy: ${threshold} consecutive collection runs errored.`,
+      key: "collection:errored",
     });
   }
 
@@ -76,7 +95,10 @@ export function evaluateDeliveryOutcome(
   const alerts: Alert[] = [];
 
   if (run.outcome === "failed") {
-    alerts.push({ text: `Delivery failed (run ${run.runId}).` });
+    alerts.push({
+      text: `Delivery failed (run ${run.runId}).`,
+      key: "delivery:failed",
+    });
   }
 
   const missingScores = Math.max(0, run.filteredCount - run.scoredCount);
@@ -93,6 +115,7 @@ export function evaluateDeliveryOutcome(
     const breakdown = countSummary(failureCounts);
     alerts.push({
       text: `Scoring impact on run ${run.runId}: ${missingScores}/${run.filteredCount} postings were left without a score${breakdown ? ` (${breakdown})` : ""}.`,
+      key: "scoring:impact",
     });
   }
 
@@ -126,6 +149,7 @@ export function evaluateDeliveryOutcome(
       ].filter(Boolean);
       alerts.push({
         text: `Scorer health on run ${run.runId}: ${failedOperations}/${totalOperations} LLM operations failed (${(failureRate * 100).toFixed(0)}%)${details.length > 0 ? ` — ${details.join("; ")}` : ""}.`,
+        key: "scoring:health",
       });
     }
   }
@@ -189,6 +213,7 @@ export function evaluateMissedRuns(
     if (lastDeliverDate !== nowDate) {
       alerts.push({
         text: `No successful scoreAndDeliver run today (scheduled ${time} ${timezone}) — no digest sent.`,
+        key: "run:missed:scoreAndDeliver",
       });
     }
   }
@@ -202,6 +227,7 @@ export function evaluateMissedRuns(
   ) {
     alerts.push({
       text: `No successful collection run in the last ${2 * config.collection.intervalHours}h (two cycles).`,
+      key: "run:missed:collection",
     });
   }
 
@@ -242,6 +268,7 @@ export function evaluateSourceFreshness(
     if (lastSeen === null) {
       alerts.push({
         text: `Source "${source}" has never delivered a posting, but a freshness window of ${expectedHours}h is configured for it — it is probably not deployed.`,
+        key: `source:never-delivered:${source}`,
       });
       continue;
     }
@@ -251,6 +278,7 @@ export function evaluateSourceFreshness(
       const staleForHours = Math.floor(staleForMs / (60 * 60 * 1000));
       alerts.push({
         text: `Source "${source}" has delivered nothing for ${staleForHours}h (expected at least every ${expectedHours}h) — last posting seen ${lastSeen.toISOString()}.`,
+        key: `source:stale:${source}`,
       });
     }
   }

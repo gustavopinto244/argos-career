@@ -45,7 +45,14 @@ function mapLocation(location: string | null | undefined): Location {
 function mapCountry(location: string | null | undefined): string | null {
   if (!location) return null;
   const segments = location.split(",");
-  if (segments.length < 2) return null;
+  // Three segments, not two. jobspy writes "City, ST, CC" — and a
+  // two-segment "Rio de Janeiro, RJ" ends in a STATE code, which
+  // `normalizeCountry` would happily accept as a country because it is also
+  // two letters. That posting would then carry `country: "RJ"`, and
+  // `isNationalPosting` would see a stated country, never consult
+  // `sourceDefaultCountry`, and file a Rio internship as international.
+  // Requiring the state segment to exist is what distinguishes the two.
+  if (segments.length < 3) return null;
   return normalizeCountry(segments[segments.length - 1]);
 }
 
