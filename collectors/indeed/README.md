@@ -119,7 +119,14 @@ a raw hit count.
 ### The remote pass (ADR-070)
 
 `INCLUDE_REMOTE=1` runs a **second pass over the same terms**, asking
-Indeed's own remote facet instead of `LOCATION`. It is **off by default**.
+Indeed's own remote facet and scoping the search to `COUNTRY_INDEED` rather
+than `LOCATION`. It is **off by default**.
+
+The country scope is the point, not an implementation detail: a remote
+internship advertised nationally is not returned by a city-scoped query.
+Measured 2026-08-27 (ADR-070 Amendment 3), one term: 3 pre-filter survivors
+scoped to Rio against **19** scoped to Brazil. The location pass keeps
+`LOCATION` — widening _that_ one drops it from 18 survivors to 6.
 
 This collector has always been pinned to `LOCATION`, so a remote internship
 advertised nationally was unreachable regardless of which term ran — and
@@ -154,9 +161,12 @@ rotation, so `trainee`/`estagiário`/`estagiária` variants, a `remote`-only
 query, and the other RJ-metro cities `location.cities` accepts were
 structurally unreachable through Indeed. `SEARCH_TERMS` (above) closes the
 "one query per run" half — a run now issues several searches and merges
-them before one ingest `POST`. **Still not covered**, deliberately: a
-`remote`-only query and per-city queries the way Gupy/Sólides run them —
-`LOCATION` stays a single value for the whole run, and jobspy's
-`is_remote` filter was not probed here. Revisit if a probed `LOCATION`
-rotation (or a remote-specific term) measures real on-track yield the way
-the five terms in `DEFAULT_SEARCH_TERMS` did.
+them before one ingest `POST`. The remote half is closed too, by ADR-070's
+`INCLUDE_REMOTE` pass above — jobspy's `is_remote` filter has now been
+probed, and it is country-scoped rather than city-scoped for the reason
+recorded there.
+
+**Still not covered**, deliberately: per-city queries the way Gupy/Sólides
+run them. `LOCATION` stays a single value for the location pass. Revisit if
+a probed `LOCATION` rotation measures real on-track yield the way the five
+terms in `DEFAULT_SEARCH_TERMS` did.

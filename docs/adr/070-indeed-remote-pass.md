@@ -236,3 +236,42 @@ says, so the next variable added has the warning in front of it.
 over 5 term(s)" instead of "10 pass(es) … + a remote pass". That line was
 added in the ADR body's own change for readability, and it is the only
 reason this was caught in minutes rather than at the next quiet digest.
+
+## Amendment 3 — the remote pass was still geo-scoped, and it cost 16 postings
+
+**2026-08-27**, found by a systematic review of this session's own work.
+
+Amendment 1 measured the remote pass and enabled it. What neither that
+measurement nor this ADR's body caught is that `scrape_term` passed
+`location=location` _alongside_ `is_remote=True`, so the remote query stayed
+scoped to `LOCATION` — "Rio de Janeiro, Brazil". This ADR and the
+collector's README and `.env.example` all describe the pass as asking the
+remote facet **instead of** `LOCATION`. The code did not do that.
+
+The stated gap was "a remote internship advertised **nationally** has been
+unreachable through this source". A city-scoped query does not reach one
+either, so the fix as shipped only partly closed the gap it named.
+
+Measured against the live source, one term (`estagio ti`), 50 rows per pass:
+
+| pass                | scope                    | returned | surviving the pre-filter |
+| ------------------- | ------------------------ | -------- | ------------------------ |
+| location            | `Rio de Janeiro, Brazil` | 50       | 18                       |
+| remote (as shipped) | `Rio de Janeiro, Brazil` | 5        | **3**                    |
+| remote (fixed)      | `Brazil`                 | 50       | **19**                   |
+
+**21 → 37 on-track, in-region postings from a single term.** Among the ones
+only the country-scoped pass reaches: "Programa de Estágio 2026 - TI SAP"
+and "Estágio em TI | Motor de Crédito", both listed `Remoto, BR`.
+
+The location pass keeps `LOCATION` untouched, and that is measured too, not
+assumed: widening _it_ to `Brazil` makes things worse — 18 surviving rows
+become 6, because nationwide onsite postings crowd out the city's own inside
+the same 50-row cap and are then rejected on location anyway. The two passes
+want different scopes, which is exactly why the remote one needed its own.
+
+**Consequence.** With the default five terms this roughly doubles the
+postings reaching the pre-filter from Indeed, and they are national, so
+ADR-068's budget does not cap them — the operator accepted that trade
+explicitly. Request volume is unchanged: the same two passes per term, only
+one of them now asks a wider question.
