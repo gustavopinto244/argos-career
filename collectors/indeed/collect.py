@@ -162,12 +162,25 @@ def scrape_term(
     -- the same "read what the source states, do not infer it from prose"
     rule ADR-063 established for InfoJobs.
     """
-    scope = "remote" if is_remote else location
+    # The remote pass searches the COUNTRY, not LOCATION. Passing the city
+    # alongside `is_remote` keeps the query geo-scoped and defeats the
+    # purpose: measured against the live source 2026-08-27, one term returned
+    # 5 remote rows (3 surviving the pre-filter) scoped to
+    # "Rio de Janeiro, Brazil" against 50 rows (19 surviving) scoped to
+    # "Brazil" -- a nationally-advertised remote internship simply is not
+    # returned by a city-scoped query. ADR-070 and this collector's README
+    # both already described the pass this way; the code did not do it.
+    #
+    # The location pass keeps LOCATION untouched: widening it to the country
+    # makes things worse, not better (18 surviving rows became 6), because
+    # nationwide ONSITE postings crowd out the city's own and are then
+    # rejected on location anyway.
+    scope = country_indeed if is_remote else location
     print(f"jobspy: searching Indeed for '{term}' in '{scope}' (up to {results_wanted})")
     jobs = scrape_jobs(
         site_name=["indeed"],
         search_term=term,
-        location=location,
+        location=scope,
         country_indeed=country_indeed,
         results_wanted=results_wanted,
         is_remote=is_remote,
