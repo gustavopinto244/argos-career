@@ -653,3 +653,40 @@ describe("PostingsRepository.rescore (docs/audit PR-024)", () => {
     expect(unnotified[0]?.fingerprint).toBe(a.posting.fingerprint);
   });
 });
+
+describe("country round-trip (ADR-068)", () => {
+  it("persists country and reads it back through findActive", () => {
+    // The field is written in two places (insert and update) and read in a
+    // third (hydration). Nothing else in the suite crosses all three, so
+    // dropping any one of them would have gone unnoticed.
+    repository.upsertMany([posting({ country: "BR" })]);
+    expect(repository.findActive()[0]?.country).toBe("BR");
+  });
+
+  it("stores null when the source states no country", () => {
+    repository.upsertMany([posting()]);
+    expect(repository.findActive()[0]?.country).toBeNull();
+  });
+
+  it("backfills a legacy row's null country on re-collection", () => {
+    // Every posting collected before ADR-068 has a null country. A source
+    // that later states one must be able to fill it in, or the whole
+    // pre-ADR corpus stays permanently unplaceable.
+    const first = posting({ country: null });
+    repository.upsertMany([first]);
+    expect(repository.findActive()[0]?.country).toBeNull();
+
+    repository.upsertMany([posting({ country: "BR" })]);
+    const stored = repository.findActive();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.country).toBe("BR");
+  });
+
+  it("keeps country out of the fingerprint, so identity does not move", () => {
+    // Adding a field to `computeFingerprint` would re-collect the entire
+    // corpus as new (ADR-007) — this is what stops that regression.
+    expect(posting({ country: "BR" }).fingerprint).toBe(
+      posting({ country: "US" }).fingerprint,
+    );
+  });
+});

@@ -1,4 +1,4 @@
-import { asc, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { Db } from "./db";
 import { pendingAlerts } from "./schema";
 
@@ -70,10 +70,7 @@ export class PendingAlertsRepository {
 
   /** Drops a row once its alert has actually been delivered. */
   remove(id: number): void {
-    this.db
-      .delete(pendingAlerts)
-      .where(sql`${pendingAlerts.id} = ${id}`)
-      .run();
+    this.db.delete(pendingAlerts).where(eq(pendingAlerts.id, id)).run();
   }
 
   /** How many alerts are waiting. Used to tell the operator that a recovery
