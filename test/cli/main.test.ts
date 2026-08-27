@@ -1195,7 +1195,7 @@ describe("describeUrlShape (ADR-064)", () => {
     expect(
       describeUrlShape("https://www.linkedin.com/e/v2?e=tok"),
     ).toMatchObject({
-      pathTemplate: "/e/v2",
+      pathTemplate: "/e/<opaque>",
       hasJobsViewPath: false,
       hasQuery: true,
     });
@@ -1453,7 +1453,7 @@ describe("executeIngestExternal", () => {
     expect(metadata.linkShape).toMatchObject({
       kind: "url",
       host: "www.linkedin.com",
-      pathTemplate: "/e/v2",
+      pathTemplate: "/e/<opaque>",
       hasQuery: true,
       // The predicate `deriveSourceIdFromLink` applies — false is exactly
       // the fact that explains the rejection.

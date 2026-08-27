@@ -44,8 +44,16 @@ function criteria(): Criteria {
 
 describe("rankForScoring (ADR-068)", () => {
   it("puts the most recent posting first", () => {
-    const old = posting({ sourceId: "old", publishedAt: daysAgo(10) });
-    const fresh = posting({ sourceId: "fresh", publishedAt: daysAgo(1) });
+    const old = posting({
+      sourceId: "old",
+      publishedAt: daysAgo(10),
+      lastSeenAt: daysAgo(10),
+    });
+    const fresh = posting({
+      sourceId: "fresh",
+      publishedAt: daysAgo(1),
+      lastSeenAt: daysAgo(1),
+    });
 
     expect(
       rankForScoring([old, fresh], criteria()).map((p) => p.sourceId),
@@ -59,11 +67,13 @@ describe("rankForScoring (ADR-068)", () => {
       sourceId: "undated-old",
       publishedAt: null,
       firstSeenAt: daysAgo(9),
+      lastSeenAt: daysAgo(9),
     });
     const undatedNew = posting({
       sourceId: "undated-new",
       publishedAt: null,
       firstSeenAt: daysAgo(2),
+      lastSeenAt: daysAgo(2),
     });
 
     expect(
@@ -96,11 +106,13 @@ describe("rankForScoring (ADR-068)", () => {
       sourceId: "stale-dev",
       title: "Estágio em Backend",
       publishedAt: daysAgo(10),
+      lastSeenAt: daysAgo(10),
     });
     const freshSupport = posting({
       sourceId: "fresh-support",
       title: "Estágio em Suporte",
       publishedAt: daysAgo(1),
+      lastSeenAt: daysAgo(1),
     });
 
     expect(
@@ -139,7 +151,11 @@ describe("rankForScoring (ADR-068)", () => {
 
   it("does not mutate its input", () => {
     const input = [
-      posting({ sourceId: "old", publishedAt: daysAgo(10) }),
+      posting({
+        sourceId: "old",
+        publishedAt: daysAgo(10),
+        lastSeenAt: daysAgo(10),
+      }),
       posting({ sourceId: "fresh", publishedAt: daysAgo(1) }),
     ];
     rankForScoring(input, criteria());
@@ -148,5 +164,28 @@ describe("rankForScoring (ADR-068)", () => {
 
   it("returns an empty array unchanged", () => {
     expect(rankForScoring([], criteria())).toEqual([]);
+  });
+
+  it("ranks a still-listed old posting above a stale newer one (ADR-066)", () => {
+    // The inconsistency this fixes: ADR-066 rescues a posting the source is
+    // STILL listing, however old its publication date — and ranking on that
+    // date alone sent exactly those to the bottom, making them the first
+    // casualties of a cancel or the international cap.
+    const stillListed = posting({
+      sourceId: "still-listed",
+      publishedAt: daysAgo(21),
+      lastSeenAt: daysAgo(0),
+    });
+    const goneButNewer = posting({
+      sourceId: "gone-but-newer",
+      publishedAt: daysAgo(5),
+      lastSeenAt: daysAgo(5),
+    });
+
+    expect(
+      rankForScoring([goneButNewer, stillListed], criteria()).map(
+        (p) => p.sourceId,
+      ),
+    ).toEqual(["still-listed", "gone-but-newer"]);
   });
 });

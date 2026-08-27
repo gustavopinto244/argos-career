@@ -124,6 +124,7 @@ describe("evaluateDeliveryOutcome", () => {
     );
     expect(alerts).toEqual([
       {
+        key: "scoring:impact",
         text: "Scoring impact on run run-1: 6/10 postings were left without a score (extraction_failed=6).",
       },
     ]);

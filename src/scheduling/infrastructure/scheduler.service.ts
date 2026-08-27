@@ -189,7 +189,10 @@ export class SchedulerService implements OnModuleInit {
 
     if (!built.ok) {
       await this.sendAlerts([
-        { text: `scoreAndDeliver misconfigured: ${built.error}` },
+        {
+          text: `scoreAndDeliver misconfigured: ${built.error}`,
+          key: "scoring:misconfigured",
+        },
       ]);
       return;
     }
@@ -245,7 +248,10 @@ export class SchedulerService implements OnModuleInit {
       } catch (cause) {
         this.logger.error("scoreAndDeliver cycle threw unexpectedly", cause);
         await this.sendAlerts([
-          { text: "scoreAndDeliver cycle threw an unexpected error." },
+          {
+            text: "scoreAndDeliver cycle threw an unexpected error.",
+            key: "scoring:threw",
+          },
         ]);
       }
     } finally {
@@ -279,7 +285,9 @@ export class SchedulerService implements OnModuleInit {
       this.logger.log(`Backed up database to ${result.path}`);
     } catch (cause) {
       this.logger.error("Nightly backup failed", cause);
-      void this.sendAlerts([{ text: "Nightly database backup failed." }]);
+      void this.sendAlerts([
+        { text: "Nightly database backup failed.", key: "backup:failed" },
+      ]);
     }
   }
 
@@ -342,7 +350,12 @@ export class SchedulerService implements OnModuleInit {
         this.logger.error(
           `Failed to send alert: ${alert.text} (${result.error.message})`,
         );
-        this.pendingAlerts.queue(alert.text, new Date(), result.error.message);
+        this.pendingAlerts.queue(
+          alert.key,
+          alert.text,
+          new Date(),
+          result.error.message,
+        );
       }
     }
   }
