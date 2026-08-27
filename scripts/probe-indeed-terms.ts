@@ -82,7 +82,13 @@ async function main(): Promise<void> {
       "in-region".padStart(11),
   );
 
-  for (const term of dump.terms) {
+  // Iterate `perTerm`'s own keys, not `terms` (ADR-070). With
+  // `INCLUDE_REMOTE=1` the collector runs a second pass per term and records
+  // it under a `"<term> [remote]"` label, so reading `terms` would silently
+  // report only the location passes — hiding exactly the rows the remote
+  // pass was enabled to measure. `terms` remains the list of search terms;
+  // `perTerm` is the list of passes, and passes are what this measures.
+  for (const term of Object.keys(dump.perTerm)) {
     const rows = dump.perTerm[term] ?? [];
     const postings = rows
       .map((row) =>

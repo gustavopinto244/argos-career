@@ -161,3 +161,78 @@ Two dead ends are recorded above rather than merely abandoned. If remote
 supply still looks thin after this, the next step is a new source (the plan's
 Phase 3), not another pass at Sólides or InfoJobs — both now have real
 numbers saying no.
+
+## Amendment 1 — measured against real Indeed traffic, and enabled
+
+**2026-08-26**, the same day. The ADR above shipped saying the remote pass
+"has not been measured against real Indeed traffic" and that the default-off
+was what made measuring a deliberate step. That step was taken immediately:
+the image was rebuilt on Atlas and run with `DRY_RUN=1 INCLUDE_REMOTE=1`
+against the live source.
+
+**The remote pass reached 15 postings across five terms**, where the location
+passes reached 229:
+
+| pass                                       | returned | on-track, in-region |
+| ------------------------------------------ | -------- | ------------------- |
+| `estagio ti [remote]`                      | 5        | 3                   |
+| `estagio desenvolvimento [remote]`         | 5        | 1                   |
+| `estagio seguranca da informacao [remote]` | 4        | 1                   |
+| `estagio suporte [remote]`                 | 1        | 0                   |
+| `estagio infraestrutura [remote]`          | 0        | 0                   |
+
+The number that decides it is the overlap check the three rejected candidates
+failed. Of the on-track postings, the location passes yield 17 and the remote
+passes 3 — and **all 3 are postings the location passes do not return**:
+
+- `Node.js Trainee Developer - Remote` (BairesDev)
+- `Desenvolvedor React Trainee - Trabalho Remoto` (BairesDev)
+- `Estágio de TI (Desenvolvimento)` (Applus+ Brasil)
+
+All three carry `country: "BR"`, so they land in ADR-068's uncapped national
+bucket, and the first two are squarely the profile's `dev` track.
+
+This is the first of the four candidates to survive its own overlap check.
+`INCLUDE_REMOTE=1` is therefore enabled in Atlas's
+`collectors/indeed/.env`. It stays off by default in the repository: the
+measurement justifies it for _this_ deployment against _these_ terms, not as
+a property of the collector.
+
+One correction to the ADR body while it is fresh: `probe:indeed` iterated
+`dump.terms` rather than `perTerm`'s keys, so it reported only the location
+passes and showed none of the above. Fixed in the same change — a measurement
+tool that silently omits the thing being measured is worse than no tool.
+
+Worth noting against `collect.py`'s own term comments, which recorded
+BairesDev's trainee postings as real dev-track hits that "all failed
+too_old": under the remote facet they pass. Either the listings are fresher
+here or ADR-066's still-listed rescue is carrying them — not disambiguated,
+and not load-bearing for this decision.
+
+## Amendment 2 — the flag was inert until the systemd unit forwarded it
+
+**2026-08-26**, minutes after Amendment 1. Enabling `INCLUDE_REMOTE=1` in
+Atlas's `.env` and starting the service produced
+`179 unique rows across 5 pass(es) over 5 term(s)` — five passes, not ten,
+and no remote pass at all.
+
+`argos-indeed-collect.service` forwards environment into the container by
+listing each name explicitly (`-e SEARCH_TERMS`, `-e LOCATION`, …). A bare
+`-e NAME` forwards that variable from `EnvironmentFile`; **a name absent from
+the list is silently dropped regardless of what `.env` contains.**
+`INCLUDE_REMOTE` was added to `collect.py` and `.env.example` and not to the
+unit, so the flag was inert.
+
+This is the same shape as ADR-063's `CollectionQuerySchema` gap — a config
+key that looks set, is accepted without complaint, and never reaches the code
+that reads it. Two independent surfaces have to agree, and nothing checks
+that they do.
+
+Fixed by adding `-e INCLUDE_REMOTE` to the unit, with a comment above the
+list saying that a name missing from it is ignored no matter what `.env`
+says, so the next variable added has the warning in front of it.
+
+**What made it visible was the pass count in the log line** — "5 pass(es)
+over 5 term(s)" instead of "10 pass(es) … + a remote pass". That line was
+added in the ADR body's own change for readability, and it is the only
+reason this was caught in minutes rather than at the next quiet digest.
