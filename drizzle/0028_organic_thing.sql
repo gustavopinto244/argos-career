@@ -1,0 +1,1 @@
+ALTER TABLE `postings` ADD `applied_at` integer;

@@ -113,7 +113,7 @@ function textOf(result: Awaited<ReturnType<Client["callTool"]>>): unknown {
 }
 
 describe("MCP server", () => {
-  it("lists all nine tools", async () => {
+  it("lists all twelve tools", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -123,10 +123,13 @@ describe("MCP server", () => {
         "get_health",
         "get_run",
         "get_study_plan",
+        "list_postings",
         "list_runs",
+        "mark_applied",
         "run_collect",
         "run_dedup",
         "run_deliver",
+        "unmark_applied",
       ].sort(),
     );
   });
@@ -284,6 +287,86 @@ describe("MCP server", () => {
   it("discard_posting returns an isError result for an unknown fingerprint", async () => {
     const result = await client.callTool({
       name: "discard_posting",
+      arguments: { fingerprint: "does-not-exist" },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  function seedPosting(fingerprintSourceId: string, title: string) {
+    const repo = new PostingsRepository(db);
+    return repo.upsert(
+      createPosting({
+        source: "gupy",
+        sourceId: fingerprintSourceId,
+        company: "Empresa X",
+        title,
+        location: { kind: "known", city: "Rio de Janeiro" },
+        workMode: "hybrid",
+        collectedAt: new Date(),
+        firstSeenAt: new Date(),
+        lastSeenAt: new Date(),
+        rawPayload: {},
+      }),
+    ).posting;
+  }
+
+  it("list_postings reads the corpus (ADR-072) — the Hermes-facing analysis query", async () => {
+    seedPosting("1", "Estágio Backend");
+
+    const result = await client.callTool({
+      name: "list_postings",
+      arguments: {},
+    });
+
+    const body = textOf(result) as {
+      total: number;
+      postings: { fingerprint: string; applied: boolean }[];
+    };
+    expect(body.total).toBe(1);
+    expect(body.postings[0]?.applied).toBe(false);
+  });
+
+  it("mark_applied and unmark_applied toggle the bookmark list_postings' applied filter reads", async () => {
+    const posting = seedPosting("1", "Estágio Backend");
+
+    const marked = await client.callTool({
+      name: "mark_applied",
+      arguments: { fingerprint: posting.fingerprint },
+    });
+    expect(textOf(marked)).toEqual({
+      fingerprint: posting.fingerprint,
+      applied: true,
+    });
+
+    const listedApplied = textOf(
+      await client.callTool({
+        name: "list_postings",
+        arguments: { applied: true },
+      }),
+    ) as { total: number };
+    expect(listedApplied.total).toBe(1);
+
+    const unmarked = await client.callTool({
+      name: "unmark_applied",
+      arguments: { fingerprint: posting.fingerprint },
+    });
+    expect(textOf(unmarked)).toEqual({
+      fingerprint: posting.fingerprint,
+      applied: false,
+    });
+
+    const listedAppliedAfter = textOf(
+      await client.callTool({
+        name: "list_postings",
+        arguments: { applied: true },
+      }),
+    ) as { total: number };
+    expect(listedAppliedAfter.total).toBe(0);
+  });
+
+  it("mark_applied returns an isError result for an unknown fingerprint", async () => {
+    const result = await client.callTool({
+      name: "mark_applied",
       arguments: { fingerprint: "does-not-exist" },
     });
     expect(result.isError).toBe(true);

@@ -188,6 +188,66 @@ export class McpController {
     );
 
     server.registerTool(
+      "list_postings",
+      {
+        description:
+          "List postings from the corpus for analysis (ADR-072) — company, " +
+          "title, verdict, score, tracks, and the manual 'applied' bookmark. " +
+          "Read-only: never scores anything, never spends LLM budget, reads " +
+          "only what Stage A/B already cached. Sorted by score, descending.",
+        inputSchema: {
+          verdict: z
+            .enum(["apply", "review", "discard"])
+            .optional()
+            .describe("Filter to one scoring verdict."),
+          applied: z
+            .boolean()
+            .optional()
+            .describe("Filter by the manual applied/not-applied bookmark."),
+          track: z
+            .string()
+            .optional()
+            .describe("dev | security | automation | data"),
+          sinceDays: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Only postings first seen in the last N days."),
+          limit: z.number().int().positive().optional(),
+        },
+      },
+      (params) => safely(() => this.postings.list(params)),
+    );
+
+    server.registerTool(
+      "mark_applied",
+      {
+        description:
+          "Mark a posting as applied to (ADR-072) — a manual bookmark, " +
+          "reversible with unmark_applied. Not automatic application " +
+          "(CLAUDE.md §2 non-goal) and not the Phase 2 feedback loop: no " +
+          "outcome or response is tracked, only that you applied.",
+        inputSchema: {
+          fingerprint: z.string().describe("The posting's fingerprint."),
+        },
+      },
+      ({ fingerprint }) => safely(() => this.postings.markApplied(fingerprint)),
+    );
+
+    server.registerTool(
+      "unmark_applied",
+      {
+        description: "Clear the applied bookmark set by mark_applied.",
+        inputSchema: {
+          fingerprint: z.string().describe("The posting's fingerprint."),
+        },
+      },
+      ({ fingerprint }) =>
+        safely(() => this.postings.unmarkApplied(fingerprint)),
+    );
+
+    server.registerTool(
       "discard_posting",
       {
         description:

@@ -82,6 +82,7 @@ revisited on its merits instead of re-argued from memory.
 | [069](adr/069-probe-any-registered-source.md)                                 | Probe any registered source, and report region and origin                           | Accepted   | 2026-08-26 |
 | [070](adr/070-indeed-remote-pass.md)                                          | An opt-in remote pass for Indeed, after measured dead ends                          | Accepted   | 2026-08-26 |
 | [071](adr/071-nerdin-collector.md)                                            | Add NerdIn as a source; reject RemotIn and Programathor                             | Accepted   | 2026-08-27 |
+| [072](adr/072-manual-applied-tracking.md)                                     | A manual, reversible "applied" bookmark, not the Phase 2 feedback loop              | Accepted   | 2026-08-28 |
 
 ## When an ADR is required
 

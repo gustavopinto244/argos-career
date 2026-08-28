@@ -47,14 +47,17 @@ import { loadCriteria } from "../prefilter/infrastructure/criteria-loader";
 import { hashCriteria } from "../prefilter/domain/criteria-hash";
 import { partitionByOrigin } from "../prefilter/domain/posting-origin";
 import { rankForScoring } from "../prefilter/domain/rank-for-scoring";
+import { classifyTrack } from "../prefilter/domain/classify-track";
 import { Profile } from "../profile/domain/profile";
 import { loadProfile } from "../profile/infrastructure/profile-loader";
 import { deriveProfileKeywords } from "../profile/domain/profile-keywords";
 import { hashProfile } from "../profile/domain/profile-hash";
 import { ScorerPort } from "../scoring/domain/ports/scorer.port";
 import { EMPTY_RECOMMENDATION } from "../scoring/domain/recommendation";
-import { scoreFailureOutcome } from "../scoring/domain/types";
+import { scoreFailureOutcome, Verdict } from "../scoring/domain/types";
 import { buildScorer } from "../scoring/infrastructure/build-scorer";
+import { computeScore } from "../scoring/domain/score";
+import { buildScoringConfig } from "../scoring/infrastructure/scoring-config";
 import {
   STAGE_A_PROMPT_VERSION,
   STAGE_B_PROMPT_VERSION,
@@ -1653,6 +1656,136 @@ export async function executeStudyPlan(
     delivered: notifyResult.ok,
     ...(notifyResult.ok ? {} : { error: notifyResult.error.message }),
   };
+}
+
+const DEFAULT_LIST_POSTINGS_LIMIT = 50;
+const MAX_LIST_POSTINGS_LIMIT = 200;
+
+export interface ListPostingsParams {
+  // `| undefined` explicit, not just `?:` — the MCP tool handler passes a
+  // Zod-parsed object straight through (same `exactOptionalPropertyTypes`
+  // reasoning as `CollectParams` above).
+  readonly verdict?: Verdict | undefined;
+  /** Filters on the manual "applied" bookmark (ADR-072) — the one M9 has no
+   * other way to query, which is the actual reason this tool exists. */
+  readonly applied?: boolean | undefined;
+  readonly track?: string | undefined;
+  /** Only postings first seen within the last N days. Omitted: no floor. */
+  readonly sinceDays?: number | undefined;
+  readonly limit?: number | undefined;
+}
+
+export interface ListedPosting {
+  readonly fingerprint: string;
+  readonly company: string;
+  readonly title: string;
+  readonly location: string | null;
+  readonly workMode: string;
+  readonly source: string;
+  readonly sourceUrl: string | null;
+  readonly publishedAt: string | null;
+  readonly firstSeenAt: string;
+  readonly tracks: readonly string[];
+  readonly verdict: Verdict | null;
+  readonly score: number | null;
+  readonly applied: boolean;
+  readonly appliedAt: string | null;
+}
+
+export interface ListPostingsOutcome {
+  readonly total: number;
+  readonly postings: readonly ListedPosting[];
+}
+
+/**
+ * The testable core of `list_postings` (Hermes-facing, added so a real
+ * consumer can pull the corpus for its own analysis rather than only
+ * trigger stages) — same "read the corpus, mutate nothing" shape as
+ * `executeStudyPlan`, reusing the exact `MarketRepository.loadCorpus`
+ * assembly M10 already built rather than a second implementation of
+ * "how do I read a scored posting."
+ *
+ * Filtering and sorting happen in memory, not in SQL — `loadCorpus` already
+ * reads the whole active corpus for the market/study-plan paths, and
+ * `docs/11-known-issues.md`'s own supply measurements put the real corpus in
+ * the low thousands, not a range that needs a second, SQL-side query path.
+ */
+export function executeListPostings(
+  db: Db,
+  criteria: Criteria,
+  profile: Profile,
+  params: ListPostingsParams,
+  now: () => Date = () => new Date(),
+  model: string = process.env.LLM_MODEL ?? "unknown",
+): ListPostingsOutcome {
+  const profileHash = hashProfile(profile, now());
+  const entries = new MarketRepository(db, criteria).loadCorpus(
+    profileHash,
+    model,
+  );
+  const appliedAtByFingerprint = new PostingsRepository(db).findAppliedAtMap();
+  const scoringConfig = buildScoringConfig(criteria);
+  const sinceMs =
+    params.sinceDays !== undefined
+      ? now().getTime() - params.sinceDays * 24 * 60 * 60 * 1000
+      : null;
+
+  const listed = entries
+    .map((entry): ListedPosting => {
+      const tracks = classifyTrack(
+        entry.posting.title,
+        criteria.tracks,
+        criteria.trackExclusions,
+      );
+      const score = entry.matches
+        ? computeScore(entry.matches, tracks, scoringConfig).score
+        : null;
+      const appliedAt =
+        appliedAtByFingerprint.get(entry.posting.fingerprint) ?? null;
+      return {
+        fingerprint: entry.posting.fingerprint,
+        company: entry.posting.company,
+        title: entry.posting.title,
+        location:
+          entry.posting.location.kind === "known"
+            ? entry.posting.location.city
+            : null,
+        workMode: entry.posting.workMode,
+        source: entry.posting.source,
+        sourceUrl: entry.posting.sourceUrl,
+        publishedAt: entry.posting.publishedAt?.toISOString() ?? null,
+        firstSeenAt: entry.posting.firstSeenAt.toISOString(),
+        tracks,
+        verdict: entry.verdict,
+        score,
+        applied: appliedAt !== null,
+        appliedAt: appliedAt?.toISOString() ?? null,
+      };
+    })
+    .filter(
+      (entry) =>
+        params.verdict === undefined || entry.verdict === params.verdict,
+    )
+    .filter(
+      (entry) =>
+        params.applied === undefined || entry.applied === params.applied,
+    )
+    .filter(
+      (entry) =>
+        params.track === undefined || entry.tracks.includes(params.track),
+    )
+    .filter(
+      (entry) =>
+        sinceMs === null || new Date(entry.firstSeenAt).getTime() >= sinceMs,
+    )
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+
+  const limit = Math.min(
+    params.limit ?? DEFAULT_LIST_POSTINGS_LIMIT,
+    MAX_LIST_POSTINGS_LIMIT,
+  );
+
+  return { total: listed.length, postings: listed.slice(0, limit) };
 }
 
 function openDatabase(): Db {

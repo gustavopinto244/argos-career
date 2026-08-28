@@ -229,8 +229,11 @@ point with an explanation rather than an absence.
 
 Recorded so their absence is a decision rather than an oversight:
 
-- **Application state.** Nothing tracks what was applied to; that is Phase 2
-  feedback and would pull the non-goal of automatic application closer.
+- **Application outcome.** A manual, reversible "applied" bookmark exists
+  (`postings.appliedAt`, ADR-072) so `list_postings` can filter on it for
+  Hermes-driven analysis — but nothing tracks what happened after: no
+  outcome, no recruiter response. That fuller feedback loop is still Phase 2
+  and still keeps the non-goal of automatic application at arm's length.
 - **Company as an entity.** Company is a normalized string. Modelling companies
   properly implies deduplicating company names, which is a harder problem than
   the one being solved.

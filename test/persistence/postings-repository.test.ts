@@ -510,6 +510,64 @@ describe("PostingsRepository.claimForScoring / releaseUnresolvedClaims (docs/aud
   });
 });
 
+describe("PostingsRepository.markApplied / unmarkApplied / findAppliedAtMap (ADR-072)", () => {
+  it("markApplied returns true and records the timestamp", () => {
+    const { posting: stored } = repository.upsert(posting());
+    const appliedAt = new Date("2026-08-28T12:00:00Z");
+
+    const found = repository.markApplied(stored.fingerprint, appliedAt);
+
+    expect(found).toBe(true);
+    expect(repository.findAppliedAtMap().get(stored.fingerprint)).toEqual(
+      appliedAt,
+    );
+  });
+
+  it("markApplied returns false for a fingerprint that does not exist", () => {
+    expect(repository.markApplied("no-such-fingerprint", new Date())).toBe(
+      false,
+    );
+  });
+
+  it("unlike discard, is a reversible toggle: unmarkApplied clears it and it can be re-marked", () => {
+    const { posting: stored } = repository.upsert(posting());
+    repository.markApplied(
+      stored.fingerprint,
+      new Date("2026-08-01T00:00:00Z"),
+    );
+
+    const unmarked = repository.unmarkApplied(stored.fingerprint);
+
+    expect(unmarked).toBe(true);
+    expect(repository.findAppliedAtMap().has(stored.fingerprint)).toBe(false);
+
+    const remarkedAt = new Date("2026-08-28T00:00:00Z");
+    repository.markApplied(stored.fingerprint, remarkedAt);
+    expect(repository.findAppliedAtMap().get(stored.fingerprint)).toEqual(
+      remarkedAt,
+    );
+  });
+
+  it("unmarkApplied returns true (idempotent) for a posting that exists but was never applied", () => {
+    const { posting: stored } = repository.upsert(posting());
+    expect(repository.unmarkApplied(stored.fingerprint)).toBe(true);
+  });
+
+  it("unmarkApplied returns false for a fingerprint that does not exist", () => {
+    expect(repository.unmarkApplied("no-such-fingerprint")).toBe(false);
+  });
+
+  it("findAppliedAtMap only includes postings currently marked applied", () => {
+    const a = repository.upsert(posting({ sourceId: "1" }));
+    repository.upsert(posting({ sourceId: "2", title: "Estágio Frontend" }));
+    repository.markApplied(a.posting.fingerprint, new Date());
+
+    const map = repository.findAppliedAtMap();
+    expect(map.size).toBe(1);
+    expect(map.has(a.posting.fingerprint)).toBe(true);
+  });
+});
+
 describe("PostingsRepository.discard", () => {
   it("returns true and records the timestamp and reason", () => {
     const { posting: stored } = repository.upsert(posting());
