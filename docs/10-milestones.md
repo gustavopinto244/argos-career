@@ -576,17 +576,19 @@ the tailnet.
 
 This is what makes ADR-017's boundary real rather than theoretical: a fixed
 Bearer key over Tailscale, timing-safe compared, every route authenticated
-by default. The MCP tools (`get_health`, `list_runs`, `get_run`,
-`run_collect`, `run_dedup`, `run_deliver`, `cancel_run`, `discard_posting`,
-`get_study_plan`, and — added by ADR-072 specifically so Hermes has a real
-corpus query to run, not only stage triggers — `list_postings`,
-`mark_applied`, `unmark_applied`) have never been called by a real
-consumer.
+by default.
 
-The constraint from CLAUDE.md §10 stands and is the point: **Hermes is a
-consumer, never the critical path.** The nightly digest goes out through the
-direct Telegram client and must keep working with Hermes — and Aquila —
-entirely down.
+**Exercised for real, 2026-08-28**, from Aquila itself (not simulated from
+Atlas or from a test harness): `GET /health` and a full MCP session —
+`tools/list` (all twelve tools), `get_health` (real `lastSuccessfulRun`
+data), `list_postings` (the real corpus, 4,138 postings, correctly scored
+and ranked), and a `mark_applied` → confirm via `list_postings({applied:
+true})` → `unmark_applied` round-trip, reverted immediately so production
+data was left unchanged. Required redeploying Atlas first — it was still on
+`8ad4745`, a commit before ADR-072 — `git pull` + `docker compose build/up
+-d`, verified healthy and with the new routes mapped before testing. Every
+MCP tool listed above has now been called by a real, second-machine
+consumer over the real network boundary.
 
 ## Where question 3 lands
 
