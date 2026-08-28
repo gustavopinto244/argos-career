@@ -183,7 +183,9 @@ describe("POST/DELETE /postings/:fingerprint/applied (ADR-072)", () => {
 
   it("returns 404 for a fingerprint that does not exist", async () => {
     await auth(
-      request(app.getHttpServer()).post("/postings/no-such-fingerprint/applied"),
+      request(app.getHttpServer()).post(
+        "/postings/no-such-fingerprint/applied",
+      ),
     ).expect(404);
     await auth(
       request(app.getHttpServer()).delete(

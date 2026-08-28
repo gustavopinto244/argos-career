@@ -204,7 +204,10 @@ export class McpController {
             .boolean()
             .optional()
             .describe("Filter by the manual applied/not-applied bookmark."),
-          track: z.string().optional().describe("dev | security | automation | data"),
+          track: z
+            .string()
+            .optional()
+            .describe("dev | security | automation | data"),
           sinceDays: z
             .number()
             .int()
@@ -225,7 +228,9 @@ export class McpController {
           "reversible with unmark_applied. Not automatic application " +
           "(CLAUDE.md §2 non-goal) and not the Phase 2 feedback loop: no " +
           "outcome or response is tracked, only that you applied.",
-        inputSchema: { fingerprint: z.string().describe("The posting's fingerprint.") },
+        inputSchema: {
+          fingerprint: z.string().describe("The posting's fingerprint."),
+        },
       },
       ({ fingerprint }) => safely(() => this.postings.markApplied(fingerprint)),
     );
@@ -234,9 +239,12 @@ export class McpController {
       "unmark_applied",
       {
         description: "Clear the applied bookmark set by mark_applied.",
-        inputSchema: { fingerprint: z.string().describe("The posting's fingerprint.") },
+        inputSchema: {
+          fingerprint: z.string().describe("The posting's fingerprint."),
+        },
       },
-      ({ fingerprint }) => safely(() => this.postings.unmarkApplied(fingerprint)),
+      ({ fingerprint }) =>
+        safely(() => this.postings.unmarkApplied(fingerprint)),
     );
 
     server.registerTool(

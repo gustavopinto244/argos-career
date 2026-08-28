@@ -531,7 +531,10 @@ describe("PostingsRepository.markApplied / unmarkApplied / findAppliedAtMap (ADR
 
   it("unlike discard, is a reversible toggle: unmarkApplied clears it and it can be re-marked", () => {
     const { posting: stored } = repository.upsert(posting());
-    repository.markApplied(stored.fingerprint, new Date("2026-08-01T00:00:00Z"));
+    repository.markApplied(
+      stored.fingerprint,
+      new Date("2026-08-01T00:00:00Z"),
+    );
 
     const unmarked = repository.unmarkApplied(stored.fingerprint);
 

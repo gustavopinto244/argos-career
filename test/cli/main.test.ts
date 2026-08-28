@@ -2970,7 +2970,12 @@ describe("executeListPostings (ADR-072) — the Hermes-facing corpus query", () 
     });
     await executeCollect(db, () => collector, [{}], undefined, 0);
 
-    const outcome = executeListPostings(db, deliverCriteria(), deliverProfile(), {});
+    const outcome = executeListPostings(
+      db,
+      deliverCriteria(),
+      deliverProfile(),
+      {},
+    );
 
     expect(outcome.total).toBe(1);
     expect(outcome.postings[0]?.verdict).toBeNull();
@@ -3001,12 +3006,22 @@ describe("executeListPostings (ADR-072) — the Hermes-facing corpus query", () 
     const [first] = repo.findActive();
     repo.markApplied(first!.fingerprint, new Date());
 
-    const applied = executeListPostings(db, deliverCriteria(), deliverProfile(), {
-      applied: true,
-    });
-    const notApplied = executeListPostings(db, deliverCriteria(), deliverProfile(), {
-      applied: false,
-    });
+    const applied = executeListPostings(
+      db,
+      deliverCriteria(),
+      deliverProfile(),
+      {
+        applied: true,
+      },
+    );
+    const notApplied = executeListPostings(
+      db,
+      deliverCriteria(),
+      deliverProfile(),
+      {
+        applied: false,
+      },
+    );
 
     expect(applied.total).toBe(1);
     expect(applied.postings[0]?.fingerprint).toBe(first!.fingerprint);
@@ -3059,13 +3074,7 @@ describe("executeListPostings (ADR-072) — the Hermes-facing corpus query", () 
       now,
     );
 
-    const outcome = executeListPostings(
-      db,
-      criteria,
-      profile,
-      {},
-      () => now,
-    );
+    const outcome = executeListPostings(db, criteria, profile, {}, () => now);
 
     expect(outcome.postings[0]?.verdict).not.toBeNull();
     expect(outcome.postings[0]?.score).not.toBeNull();
@@ -3105,12 +3114,22 @@ describe("executeListPostings (ADR-072) — the Hermes-facing corpus query", () 
     });
     await executeCollect(db, () => collector, [{}], undefined, 0);
 
-    const matchingTrack = executeListPostings(db, deliverCriteria(), deliverProfile(), {
-      track: "dev",
-    });
-    const otherTrack = executeListPostings(db, deliverCriteria(), deliverProfile(), {
-      track: "security",
-    });
+    const matchingTrack = executeListPostings(
+      db,
+      deliverCriteria(),
+      deliverProfile(),
+      {
+        track: "dev",
+      },
+    );
+    const otherTrack = executeListPostings(
+      db,
+      deliverCriteria(),
+      deliverProfile(),
+      {
+        track: "security",
+      },
+    );
     expect(matchingTrack.total).toBe(1);
     expect(otherTrack.total).toBe(0);
 
@@ -3144,9 +3163,14 @@ describe("executeListPostings (ADR-072) — the Hermes-facing corpus query", () 
     });
     await executeCollect(db, () => collector, [{}], undefined, 0);
 
-    const capped = executeListPostings(db, deliverCriteria(), deliverProfile(), {
-      limit: 1,
-    });
+    const capped = executeListPostings(
+      db,
+      deliverCriteria(),
+      deliverProfile(),
+      {
+        limit: 1,
+      },
+    );
 
     expect(capped.total).toBe(2);
     expect(capped.postings).toHaveLength(1);

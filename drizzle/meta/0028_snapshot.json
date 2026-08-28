@@ -82,17 +82,12 @@
       "indexes": {
         "delivery_chunks_operation_index_unique": {
           "name": "delivery_chunks_operation_index_unique",
-          "columns": [
-            "operation_id",
-            "chunk_index"
-          ],
+          "columns": ["operation_id", "chunk_index"],
           "isUnique": true
         },
         "delivery_chunks_operation_idx": {
           "name": "delivery_chunks_operation_idx",
-          "columns": [
-            "operation_id"
-          ],
+          "columns": ["operation_id"],
           "isUnique": false
         }
       },
@@ -171,17 +166,12 @@
       "indexes": {
         "delivery_operations_channel_content_unique": {
           "name": "delivery_operations_channel_content_unique",
-          "columns": [
-            "channel_key",
-            "content_hash"
-          ],
+          "columns": ["channel_key", "content_hash"],
           "isUnique": true
         },
         "delivery_operations_status_idx": {
           "name": "delivery_operations_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         }
       },
@@ -260,12 +250,7 @@
       "indexes": {
         "extractions_composite_identity_unique": {
           "name": "extractions_composite_identity_unique",
-          "columns": [
-            "fingerprint",
-            "prompt_version",
-            "model",
-            "content_hash"
-          ],
+          "columns": ["fingerprint", "prompt_version", "model", "content_hash"],
           "isUnique": true
         }
       },
@@ -506,9 +491,7 @@
       "indexes": {
         "pending_alerts_key_unique": {
           "name": "pending_alerts_key_unique",
-          "columns": [
-            "alert_key"
-          ],
+          "columns": ["alert_key"],
           "isUnique": true
         }
       },
@@ -601,16 +584,12 @@
       "indexes": {
         "posting_events_run_id_idx": {
           "name": "posting_events_run_id_idx",
-          "columns": [
-            "run_id"
-          ],
+          "columns": ["run_id"],
           "isUnique": false
         },
         "posting_events_fingerprint_idx": {
           "name": "posting_events_fingerprint_idx",
-          "columns": [
-            "fingerprint"
-          ],
+          "columns": ["fingerprint"],
           "isUnique": false
         }
       },
@@ -823,16 +802,12 @@
       "indexes": {
         "postings_fingerprint_unique": {
           "name": "postings_fingerprint_unique",
-          "columns": [
-            "fingerprint"
-          ],
+          "columns": ["fingerprint"],
           "isUnique": true
         },
         "postings_company_idx": {
           "name": "postings_company_idx",
-          "columns": [
-            "company"
-          ],
+          "columns": ["company"],
           "isUnique": false
         }
       },

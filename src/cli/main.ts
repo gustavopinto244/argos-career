@@ -1740,7 +1740,8 @@ export function executeListPostings(
       const score = entry.matches
         ? computeScore(entry.matches, tracks, scoringConfig).score
         : null;
-      const appliedAt = appliedAtByFingerprint.get(entry.posting.fingerprint) ?? null;
+      const appliedAt =
+        appliedAtByFingerprint.get(entry.posting.fingerprint) ?? null;
       return {
         fingerprint: entry.posting.fingerprint,
         company: entry.posting.company,
@@ -1761,9 +1762,18 @@ export function executeListPostings(
         appliedAt: appliedAt?.toISOString() ?? null,
       };
     })
-    .filter((entry) => params.verdict === undefined || entry.verdict === params.verdict)
-    .filter((entry) => params.applied === undefined || entry.applied === params.applied)
-    .filter((entry) => params.track === undefined || entry.tracks.includes(params.track))
+    .filter(
+      (entry) =>
+        params.verdict === undefined || entry.verdict === params.verdict,
+    )
+    .filter(
+      (entry) =>
+        params.applied === undefined || entry.applied === params.applied,
+    )
+    .filter(
+      (entry) =>
+        params.track === undefined || entry.tracks.includes(params.track),
+    )
     .filter(
       (entry) =>
         sinceMs === null || new Date(entry.firstSeenAt).getTime() >= sinceMs,

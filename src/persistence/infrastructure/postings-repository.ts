@@ -624,7 +624,10 @@ export class PostingsRepository {
       .update(postings)
       .set({ appliedAt: null })
       .where(
-        and(eq(postings.fingerprint, fingerprint), isNotNull(postings.appliedAt)),
+        and(
+          eq(postings.fingerprint, fingerprint),
+          isNotNull(postings.appliedAt),
+        ),
       )
       .run();
     if (result.changes > 0) return true;
@@ -643,7 +646,10 @@ export class PostingsRepository {
    */
   findAppliedAtMap(): Map<string, Date> {
     const rows = this.db
-      .select({ fingerprint: postings.fingerprint, appliedAt: postings.appliedAt })
+      .select({
+        fingerprint: postings.fingerprint,
+        appliedAt: postings.appliedAt,
+      })
       .from(postings)
       .where(isNotNull(postings.appliedAt))
       .all();
