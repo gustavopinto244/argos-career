@@ -159,3 +159,36 @@ describe("POST /postings/:fingerprint/discard", () => {
       .expect(201);
   });
 });
+
+describe("POST/DELETE /postings/:fingerprint/applied (ADR-072)", () => {
+  it("requires authentication", async () => {
+    await request(app.getHttpServer())
+      .post(`/postings/${seedPosting()}/applied`)
+      .expect(401);
+  });
+
+  it("marks a posting applied, then unmarks it — a reversible toggle, unlike discard", async () => {
+    const fingerprint = seedPosting();
+
+    const marked = await auth(
+      request(app.getHttpServer()).post(`/postings/${fingerprint}/applied`),
+    ).expect(201);
+    expect(marked.body).toEqual({ fingerprint, applied: true });
+
+    const unmarked = await auth(
+      request(app.getHttpServer()).delete(`/postings/${fingerprint}/applied`),
+    ).expect(200);
+    expect(unmarked.body).toEqual({ fingerprint, applied: false });
+  });
+
+  it("returns 404 for a fingerprint that does not exist", async () => {
+    await auth(
+      request(app.getHttpServer()).post("/postings/no-such-fingerprint/applied"),
+    ).expect(404);
+    await auth(
+      request(app.getHttpServer()).delete(
+        "/postings/no-such-fingerprint/applied",
+      ),
+    ).expect(404);
+  });
+});

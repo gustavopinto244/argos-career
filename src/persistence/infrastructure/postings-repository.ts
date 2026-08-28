@@ -603,6 +603,58 @@ export class PostingsRepository {
   }
 
   /**
+   * Sets the manual "I applied" bookmark (ADR-072) — a toggle, not a
+   * write-once decision like `discard`: reversible because marking it by
+   * mistake is a plausible slip. Returns `false` when the fingerprint does
+   * not exist, same idempotent-check contract as `discard`.
+   */
+  markApplied(fingerprint: string, appliedAt: Date): boolean {
+    const result = this.db
+      .update(postings)
+      .set({ appliedAt })
+      .where(eq(postings.fingerprint, fingerprint))
+      .run();
+    return result.changes > 0;
+  }
+
+  /** Clears the bookmark `markApplied` set. `false` for a fingerprint that
+   * does not exist or was never marked applied. */
+  unmarkApplied(fingerprint: string): boolean {
+    const result = this.db
+      .update(postings)
+      .set({ appliedAt: null })
+      .where(
+        and(eq(postings.fingerprint, fingerprint), isNotNull(postings.appliedAt)),
+      )
+      .run();
+    if (result.changes > 0) return true;
+    const exists = this.db
+      .select({ fingerprint: postings.fingerprint })
+      .from(postings)
+      .where(eq(postings.fingerprint, fingerprint))
+      .get();
+    return exists !== undefined;
+  }
+
+  /**
+   * Every fingerprint currently marked applied, keyed to its timestamp
+   * (ADR-072) — read once by `executeListPostings` rather than one query per
+   * corpus entry, same batching reasoning as `findLastSeenAtBySource`.
+   */
+  findAppliedAtMap(): Map<string, Date> {
+    const rows = this.db
+      .select({ fingerprint: postings.fingerprint, appliedAt: postings.appliedAt })
+      .from(postings)
+      .where(isNotNull(postings.appliedAt))
+      .all();
+    const map = new Map<string, Date>();
+    for (const row of rows) {
+      if (row.appliedAt) map.set(row.fingerprint, row.appliedAt);
+    }
+    return map;
+  }
+
+  /**
    * Written by stage A (M7) once extraction succeeds — `05-domain-model.md`:
    * these are fields the score sees, not only the pre-filter's title
    * pattern. Unlike `firstSeenAt`, this is a plain overwrite: a prompt

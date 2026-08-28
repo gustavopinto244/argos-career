@@ -112,6 +112,12 @@ export const postings = sqliteTable(
     // claims (a posting still claimed by a still-running concurrent process
     // must not have its claim cleared out from under it).
     scoringClaimRunId: text("scoring_claim_run_id"),
+    // A manual bookmark — "I applied to this" — deliberately not the Phase 2
+    // feedback loop (ADR-072, docs/05-domain-model.md): no outcome, no
+    // response tracking, nothing automatic. Unlike `discardedAt`, this is a
+    // toggle, not write-once: marking "applied" by mistake is a plausible
+    // slip a human should be able to undo without a direct database edit.
+    appliedAt: integer("applied_at", { mode: "timestamp_ms" }),
   },
   (table) => [
     uniqueIndex("postings_fingerprint_unique").on(table.fingerprint),

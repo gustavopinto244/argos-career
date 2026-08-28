@@ -576,8 +576,11 @@ the tailnet.
 
 This is what makes ADR-017's boundary real rather than theoretical: a fixed
 Bearer key over Tailscale, timing-safe compared, every route authenticated
-by default. The six MCP tools (`get_health`, `list_runs`, `get_run`,
-`run_collect`, `run_dedup`, `run_deliver`) have never been called by a real
+by default. The MCP tools (`get_health`, `list_runs`, `get_run`,
+`run_collect`, `run_dedup`, `run_deliver`, `cancel_run`, `discard_posting`,
+`get_study_plan`, and — added by ADR-072 specifically so Hermes has a real
+corpus query to run, not only stage triggers — `list_postings`,
+`mark_applied`, `unmark_applied`) have never been called by a real
 consumer.
 
 The constraint from CLAUDE.md §10 stands and is the point: **Hermes is a

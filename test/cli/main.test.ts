@@ -12,6 +12,7 @@ import {
   executeDedup,
   executeDeliver,
   executeIngestExternal,
+  executeListPostings,
   executeStudyPlan,
   type ExternalRawPosting,
 } from "../../src/cli/main";
@@ -41,8 +42,19 @@ import {
 } from "../../src/posting/domain/ports/collector.port";
 import { Criteria } from "../../src/prefilter/domain/criteria";
 import { Profile } from "../../src/profile/domain/profile";
+import { hashProfile } from "../../src/profile/domain/profile-hash";
 import { StubScorer } from "../../src/scoring/infrastructure/stub-scorer";
 import { ScorerPort } from "../../src/scoring/domain/ports/scorer.port";
+import { ExtractionsRepository } from "../../src/persistence/infrastructure/extractions-repository";
+import { MatchesRepository } from "../../src/persistence/infrastructure/matches-repository";
+import { hashRequirements } from "../../src/scoring/domain/requirements-hash";
+import { normalizePostingContent } from "../../src/scoring/domain/posting-content-hash";
+import { DEFAULT_MAX_DESCRIPTION_CHARS } from "../../src/scoring/infrastructure/stage-a-extractor";
+import {
+  STAGE_A_PROMPT_VERSION,
+  STAGE_B_PROMPT_VERSION,
+} from "../../src/scoring/infrastructure/prompts";
+import { createMatch, Requirement } from "../../src/scoring/domain/types";
 import { Digest } from "../../src/delivery/domain/digest";
 import {
   NotifierPort,
@@ -2936,5 +2948,207 @@ describe("executeStudyPlan", () => {
 
     expect(outcome.delivered).toBe(false);
     expect(outcome.error).toBe("Telegram is down");
+  });
+});
+
+describe("executeListPostings (ADR-072) — the Hermes-facing corpus query", () => {
+  function requirement(text: string): Requirement {
+    return { text, category: "language", weight: "mandatory" };
+  }
+
+  it("lists a posting with no extraction, with a null verdict and score, not applied", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: [
+        {
+          source: "gupy",
+          sourceId: "1",
+          payload: gupyPayload(1, "Estágio em Backend"),
+        },
+      ],
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const outcome = executeListPostings(db, deliverCriteria(), deliverProfile(), {});
+
+    expect(outcome.total).toBe(1);
+    expect(outcome.postings[0]?.verdict).toBeNull();
+    expect(outcome.postings[0]?.score).toBeNull();
+    expect(outcome.postings[0]?.applied).toBe(false);
+    expect(outcome.postings[0]?.appliedAt).toBeNull();
+  });
+
+  it("filters by the manual applied bookmark", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: [
+        {
+          source: "gupy",
+          sourceId: "1",
+          payload: gupyPayload(1, "Estágio em Backend"),
+        },
+        {
+          source: "gupy",
+          sourceId: "2",
+          payload: gupyPayload(2, "Estágio em Frontend"),
+        },
+      ],
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+    const repo = new PostingsRepository(db);
+    const [first] = repo.findActive();
+    repo.markApplied(first!.fingerprint, new Date());
+
+    const applied = executeListPostings(db, deliverCriteria(), deliverProfile(), {
+      applied: true,
+    });
+    const notApplied = executeListPostings(db, deliverCriteria(), deliverProfile(), {
+      applied: false,
+    });
+
+    expect(applied.total).toBe(1);
+    expect(applied.postings[0]?.fingerprint).toBe(first!.fingerprint);
+    expect(notApplied.total).toBe(1);
+    expect(notApplied.postings[0]?.fingerprint).not.toBe(first!.fingerprint);
+  });
+
+  it("filters by verdict and reports a real score, computed the same way MarketRepository would", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: [
+        {
+          source: "gupy",
+          sourceId: "1",
+          payload: gupyPayload(1, "Estágio em Backend"),
+        },
+      ],
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const profile = deliverProfile();
+    const criteria = deliverCriteria();
+    const now = new Date();
+    const profileHash = hashProfile(profile, now);
+    const repo = new PostingsRepository(db);
+    const [posting] = repo.findActive();
+
+    const requirements = [requirement("Node.js")];
+    const contentHash = normalizePostingContent(
+      posting!.title,
+      posting!.description,
+      DEFAULT_MAX_DESCRIPTION_CHARS,
+    ).contentHash;
+    new ExtractionsRepository(db).upsert(
+      posting!.fingerprint,
+      STAGE_A_PROMPT_VERSION,
+      "unknown",
+      contentHash,
+      { requirements, seniority: null, experienceYears: null },
+      now,
+    );
+    new MatchesRepository(db).upsert(
+      posting!.fingerprint,
+      profileHash,
+      STAGE_B_PROMPT_VERSION,
+      "unknown",
+      hashRequirements(requirements),
+      [createMatch(requirement("Node.js"), "met", "Built one.")],
+      now,
+    );
+
+    const outcome = executeListPostings(
+      db,
+      criteria,
+      profile,
+      {},
+      () => now,
+    );
+
+    expect(outcome.postings[0]?.verdict).not.toBeNull();
+    expect(outcome.postings[0]?.score).not.toBeNull();
+
+    const filtered = executeListPostings(
+      db,
+      criteria,
+      profile,
+      { verdict: outcome.postings[0]!.verdict! },
+      () => now,
+    );
+    expect(filtered.total).toBe(1);
+
+    const excluded = executeListPostings(
+      db,
+      criteria,
+      profile,
+      {
+        verdict: outcome.postings[0]!.verdict === "apply" ? "discard" : "apply",
+      },
+      () => now,
+    );
+    expect(excluded.total).toBe(0);
+  });
+
+  it("filters by track and by sinceDays", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: [
+        {
+          source: "gupy",
+          sourceId: "1",
+          payload: gupyPayload(1, "Estágio em Backend"),
+        },
+      ],
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const matchingTrack = executeListPostings(db, deliverCriteria(), deliverProfile(), {
+      track: "dev",
+    });
+    const otherTrack = executeListPostings(db, deliverCriteria(), deliverProfile(), {
+      track: "security",
+    });
+    expect(matchingTrack.total).toBe(1);
+    expect(otherTrack.total).toBe(0);
+
+    const now = () => new Date(Date.now() + 100 * 24 * 60 * 60 * 1000);
+    const tooOld = executeListPostings(
+      db,
+      deliverCriteria(),
+      deliverProfile(),
+      { sinceDays: 1 },
+      now,
+    );
+    expect(tooOld.total).toBe(0);
+  });
+
+  it("caps the returned page at limit, without changing total", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: [
+        {
+          source: "gupy",
+          sourceId: "1",
+          payload: gupyPayload(1, "Estágio em Backend"),
+        },
+        {
+          source: "gupy",
+          sourceId: "2",
+          payload: gupyPayload(2, "Estágio em Frontend"),
+        },
+      ],
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const capped = executeListPostings(db, deliverCriteria(), deliverProfile(), {
+      limit: 1,
+    });
+
+    expect(capped.total).toBe(2);
+    expect(capped.postings).toHaveLength(1);
   });
 });
