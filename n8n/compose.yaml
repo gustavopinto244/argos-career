@@ -27,7 +27,18 @@ name: n8n
 # Deploy: `docker compose up -d` from this directory, then `docker stats n8n`
 # to replace ADR-008's "n8n's memory footprint is unmeasured" assumption with
 # a real number, the same way argos-career's own measured 54.8 MiB replaced
-# an earlier guess (CLAUDE.md §5).
+# an earlier guess (CLAUDE.md §5). Measured 2026-08-29: 813 MiB at rest —
+# real, and comfortably inside Atlas's headroom (5.7 GiB free with n8n
+# running), but an order of magnitude heavier than argos-career's own 52 MiB.
+#
+# `N8N_SECURE_COOKIE=false`: n8n's default requires HTTPS to set its auth
+# cookie, and this editor is only ever reached over plain HTTP through the
+# Tailscale-bound port above — never a public URL. Tailscale's own transport
+# is already encrypted (WireGuard) between tailnet peers, which is the same
+# trust boundary ADR-017 already relies on for Hermes's calls to this API
+# with no extra TLS layered on top; disabling the cookie's HTTPS requirement
+# here is the documented option for exactly this case (n8n's own /setup
+# error page names it), not a weakening of what actually protects the editor.
 services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
@@ -36,6 +47,7 @@ services:
     environment:
       - GENERIC_TIMEZONE=America/Sao_Paulo
       - TZ=America/Sao_Paulo
+      - N8N_SECURE_COOKIE=false
     ports:
       - "${ATLAS_TAILSCALE_IP}:5678:5678"
     volumes:
