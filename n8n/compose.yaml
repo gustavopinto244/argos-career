@@ -1,0 +1,45 @@
+name: n8n
+
+# ADR-030 Amendment 1. n8n now runs on Atlas itself, next to argos-career,
+# instead of n8n.cloud. The entire reason ADR-030 opened a public Cloudflare
+# Tunnel hostname was that n8n.cloud had no shell and could not join Atlas's
+# tailnet — running it here removes that constraint. This container reaches
+# ArgosCareer's API the same way Hermes already does (ADR-017): over
+# Tailscale, Bearer-authenticated, never through a public hostname. The
+# LinkedIn workflow's HTTP Request node should point at
+# `https://${ATLAS_TAILSCALE_IP}:${API_PORT}/runs/collect/external`, not the
+# old `argos-api.gustavopinto.dev.br` tunnel hostname.
+#
+# Independent of argos-career's own compose project on purpose (ADR-008):
+# n8n is never the orchestrator and never on the critical path, so its
+# lifecycle stays separate — stopping this container must not affect
+# argos-career's own collect/score/deliver runs.
+#
+# Bound to Atlas's Tailscale interface only, matching compose.production.yaml
+# next door — never 0.0.0.0. Reachable from any other tailnet machine for the
+# one-time setup (importing a workflow, reauthorizing the Gmail and Google
+# Sheets OAuth2 credentials — an exported workflow JSON carries only a
+# credential's name and id, never the credential itself).
+#
+# n8n's own SQLite state (workflows, credentials, execution history) lives in
+# the n8n-data volume below, entirely separate from argos-career's database.
+#
+# Deploy: `docker compose up -d` from this directory, then `docker stats n8n`
+# to replace ADR-008's "n8n's memory footprint is unmeasured" assumption with
+# a real number, the same way argos-career's own measured 54.8 MiB replaced
+# an earlier guess (CLAUDE.md §5).
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+    ports:
+      - "${ATLAS_TAILSCALE_IP}:5678:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+
+volumes:
+  n8n-data:
