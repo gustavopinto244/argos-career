@@ -161,16 +161,21 @@ every other Tailscale-only surface in this project). Confirmed working: two
 real LinkedIn postings landed in `postings` the same day (docs/11
 known-issues.md B15, resolved).
 
-**Once that is confirmed working — not before —** this ADR's whole
-Cloudflare Tunnel route becomes exactly the kind of removable, low-cost
-reversal its own Consequences section already described: delete the
-`argos-api.gustavopinto.dev.br` ingress rule (both the harmless local
-`config.yml` line and the dashboard-side route the ADR's own Correction
-found actually governs it) and its DNS record, restart `cloudflared`.
-Nothing in application code references this hostname either way.
+**Removed, 2026-08-29, same day.** Both halves of the reversal this ADR's
+own Consequences section called "cheap": the operator deleted the
+dashboard-side route (Zero Trust → Networks → Tunnels → Public Hostname) —
+the one the ADR's own Correction found actually governs this hostname — and
+the `argos-api.gustavopinto.dev.br` block was removed from the local
+`config.yml` too, for consistency, even though `cloudflared`'s own applied
+config (visible via `journalctl -u cloudflared`) confirmed the dashboard
+route was what mattered: the effective ingress list no longer names this
+hostname at all. Verified externally: `curl https://argos-api.gustavopinto.
+dev.br/health` returns `HTTP 530` (Cloudflare's "no route to origin"), not a
+response from `ApiKeyGuard`. Nothing in application code referenced this
+hostname either way, so no code or config elsewhere needed to change.
 
 This closes the "Hard" cost stated above, not just relocates it: the entire
-API stops being reachable from the public internet through this hostname,
-and `API_KEY` goes back to gating only tailnet callers (Hermes and, now,
-n8n) — the property ADR-017 originally chose and this ADR had to trade away
-for a caller that no longer exists in this shape.
+API stopped being reachable from the public internet through this hostname,
+and `API_KEY` goes back to gating only tailnet callers (Hermes and n8n) —
+the property ADR-017 originally chose and this ADR had to trade away for a
+caller that no longer exists in this shape.
