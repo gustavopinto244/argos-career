@@ -40,11 +40,10 @@ name: n8n
 # here is the documented option for exactly this case (n8n's own /setup
 # error page names it), not a weakening of what actually protects the editor.
 #
-# `N8N_EDITOR_BASE_URL`: without it n8n defaults to `localhost` when it
-# builds any URL that leaves the browser and comes back — most importantly
-# the OAuth2 redirect URI shown on a credential (Gmail, Google Sheets). A
-# `localhost` redirect is wrong here: the browser doing the OAuth dance is a
-# different machine than the one running n8n. A bare Tailscale IP does not
+# `WEBHOOK_URL`/`N8N_EDITOR_BASE_URL`: without them n8n defaults to
+# `localhost` when it builds any URL that leaves the browser and comes back.
+# A `localhost` redirect is wrong here: the browser doing the OAuth dance is
+# a different machine than the one running n8n. A bare Tailscale IP does not
 # fix it either — Google's own OAuth client setup rejects a redirect URI
 # whose host is not a real registered domain (an IP literal fails
 # "must end in a public top-level domain"). The actual fix needed a real
@@ -52,9 +51,17 @@ name: n8n
 # http://${ATLAS_TAILSCALE_IP}:5678` (one-time, run on Atlas itself, not
 # tracked here — Tailscale state, not container config) terminates TLS with
 # a real cert for Atlas's own MagicDNS name and tailnet-only proxies it to
-# n8n, so `https://atlas.<tailnet>.ts.net/rest/oauth2-credential/callback`
-# is both a real domain and real HTTPS, and is what to register on the
-# Google Cloud OAuth client.
+# n8n, so `https://atlas.<tailnet>.ts.net/...` is both a real domain and
+# real HTTPS. **`N8N_EDITOR_BASE_URL` alone was not enough** — confirmed live
+# against the Gmail credential's own displayed "OAuth Redirect URL" field,
+# which stayed `http://localhost:5678/...` with only that var set. n8n's
+# OAuth2 callback URL is built via the same `getInstanceBaseUrl()` webhooks
+# use, which reads `WEBHOOK_URL` ahead of `N8N_EDITOR_BASE_URL` — the
+# credential field only showed the right domain once `WEBHOOK_URL` was set
+# too. Both are kept: `WEBHOOK_URL` for the OAuth/webhook-facing URL,
+# `N8N_EDITOR_BASE_URL` for the frontend's own UI links (unverified whether
+# anything in this single-workflow, no-webhook setup actually reads the
+# latter, but harmless to set alongside).
 services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
@@ -65,6 +72,7 @@ services:
       - TZ=America/Sao_Paulo
       - N8N_SECURE_COOKIE=false
       - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL}
+      - WEBHOOK_URL=${WEBHOOK_URL}
     ports:
       - "${ATLAS_TAILSCALE_IP}:5678:5678"
     volumes:
