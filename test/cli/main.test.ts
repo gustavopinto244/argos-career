@@ -1117,6 +1117,7 @@ function deliverCriteria(): Criteria {
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
     stillListedWithinHours: null,
+    stillListedMaxAgeDays: null,
     sourceDefaultCountry: {},
     homeCountry: "BR",
     maxInternationalPerRun: null,

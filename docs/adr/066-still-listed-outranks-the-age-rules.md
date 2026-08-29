@@ -138,3 +138,71 @@ already been notified. The binding constraint is supply — back-end and
 security internships in the Rio metro, for someone in their 2nd academic
 period — not filtering. This ADR recovers real postings that were being
 thrown away; it does not manufacture a market.
+
+## Amendment 1 — an absolute ceiling on the rescue (2026-08-29)
+
+The Consequences section above left one question open: "a ceiling can be
+added if zombies turn out to be common, which is a measurement nobody has
+yet." Three nights of production data after ADR-070 Amendment 3
+(2026-08-27/28/29) supplied it: every single `scoreAndDeliver` run in that
+window admitted 2-3 postings past `maxAgeDays: 7` purely on the still-listed
+rescue, the oldest reaching 314 hours (~13 days) since `firstSeenAt`. Common,
+not hypothetical.
+
+Zooming out from those three runs to the full still-listed corpus (2,584
+postings with `lastSeenAt` inside the 30h window) sharpened the picture. The
+bulk cluster tight around a 12-13 day median — CIEE's undated backlog moving
+together — but there is a real tail past it: 29 postings over 30 days old,
+18 over 45, 11 over 60, 7 over 90, one **424 days old** (`Full Stack
+Developer`, Indeed — not even an internship title, so `title_missing_required_term`
+would already reject it regardless). The oldest confirmed **on-track** case
+in that tail was `Estagiário(a) de Tecnologia da Informação – TI` (Indeed,
+Méier-RJ) at 71 days.
+
+### Considered options
+
+**Cap `stillListedWithinHours` itself lower** — rejected. That field measures
+freshness of the _signal_ (how recently the source confirmed the posting is
+open), which is a property of collection cadence, not of the posting's age. It
+was already tuned to the slowest source's cycle (ADR-066 body, Indeed's 12h
+twice-daily sweep); shrinking it to fight zombies would make it start missing
+real still-open postings again, solving the wrong variable.
+
+**No ceiling, since the original ADR already accepted a 67-day case** —
+rejected. That acceptance was for one measured example, not a blank check;
+the corpus now shows the same mechanism reaching over a year, and nothing
+about the rescue's logic distinguishes 67 days from 424.
+
+**A separate absolute ceiling on age itself (chosen)** — orthogonal to the
+freshness signal: `stillListedWithinHours` still asks "is the source
+confirming this today", and the new `stillListedMaxAgeDays` asks "even so,
+is it too old to be worth a model call at all." Measured against the real
+tail above, 90 days keeps every on-track case seen so far (including the
+71-day Méier posting, and the 67-day case that motivated the original
+Consequences note) while cutting the part of the tail that is old enough to
+be almost certainly closed or off-track already — none of the postings past
+90 days in the measured tail were on-track internships.
+
+### Decision
+
+`stillListedMaxAgeDays: 90` (nullable, `null` disables it and restores the
+original unbounded rescue). Applied inside `isTooOld`: a posting is only
+rescued by `isStillListedBySource` when its age — measured the same way
+`maxAgeDays` measures it, `publishedAt` falling back to `firstSeenAt` — is
+also within this ceiling. Past it, the posting falls through to the normal
+`too_old` evaluation, including `undatedBacklogCutoverAt`, exactly as if it
+had never been rescued.
+
+### Consequences
+
+Same asymmetry as the parent decision, one level down: the ceiling only ever
+_removes_ a rescue, never rejects a posting the original age rules would
+have passed on their own. A source that stops being swept still ages its
+postings out under `maxAgeDays` as before; this only changes what happens
+once they are also older than 90 days regardless.
+
+A separate finding from the same watch period — NerdIn's second consecutive
+week at `onTrackInRegion: 0` (`docs/10-milestones.md`) — was deliberately
+left as-is: the operator chose to keep the query running rather than park it
+per the ADR-071 decision rule. That is a source-selection question,
+unrelated to this ceiling.

@@ -526,28 +526,34 @@ Three things, in the order they unblock each other. None is a milestone of
 its own; they are the work that turns what already ships into something
 exercised.
 
-### 1. Watch the features that just landed, for a few days
+### 1. Watch the features that just landed, for a few days — DONE, 2026-08-29
 
-Eleven PRs merged on 2026-08-26/27 changed what reaches the digest, and
-several are verified only against one run. What needs a real week before it
-can be called done:
+Eleven PRs merged on 2026-08-26/27 changed what reaches the digest.
+Reviewed against three real nights (`scoreAndDeliver` on 27, 28 and 29/08),
+plus `npm run report:supply -- --weeks 2` over the real corpus:
 
-- **Cost.** The 27/08 run scored 18 and cost US$0.023 against a 10-day
-  baseline of 10.2 scored and US$0.005. Cost per _delivered_ posting went
-  from US$0.00138 to US$0.00194 — on n=1, with 3 scoring failures in that
-  run, so it is not conclusive. ADR-070 Amendment 3 roughly doubled what
-  Indeed sends to the pre-filter, so the next runs are the real measurement.
-  National scoring is uncapped by decision (ADR-068); this is monitored, not
-  contained.
-- **`stillListedWithinHours: 30`** (ADR-066) has no steady-state
-  observation, and its accepted cost is a 67-day-old still-listed posting
-  getting scored. If zombies turn out to be common, that is when an age
-  ceiling gets argued for — with a measurement, not a guess.
-- **NerdIn** (ADR-071) has 2 postings in the corpus and one collection
-  behind it. `npm run report:supply -- --weeks 2` decides whether it stays;
-  `onTrackInRegion: 0` means parking the query, as Sólides was.
-- **The international path** (ADR-068) has never met a real foreign posting.
-  It is unit-tested only, and `maxInternationalPerRun` is still `null`.
+- **Cost.** Confirmed higher than the US$0.00138/delivered baseline on all
+  three nights, not just the n=1 first observation: US$0.00194 (27/08, 12
+  delivered), US$0.00287 (28/08, 15 delivered), US$0.00181 (29/08, 2
+  delivered). ADR-070 Amendment 3 doubling what Indeed sends to the
+  pre-filter is the expected cause. Still monitored, not contained, by
+  ADR-068's decision to leave national scoring uncapped.
+- **`stillListedWithinHours: 30`** (ADR-066) — zombies turned out to be
+  common, not hypothetical: 2-3 admitted past `maxAgeDays: 7` on every one of
+  the three nights, the oldest at 314h (~13 days). Widening to the full
+  still-listed corpus (2,584 postings) found a real tail past the original
+  67-day example — up to 424 days — with the oldest confirmed on-track case
+  at 71 days. **Resolved with ADR-066 Amendment 1**: `stillListedMaxAgeDays:
+90` caps the rescue itself, keeping every on-track case measured so far
+  while cutting the part of the tail that is old enough to be almost
+  certainly closed.
+- **NerdIn** (ADR-071) — second week in a row at `onTrackInRegion: 0` (2
+  postings collected total). Per the ADR-071 decision rule this is "park the
+  query," but the operator chose to keep it running rather than park it now.
+  Revisit if a third week shows the same.
+- **The international path** (ADR-068) — still zero. No posting in the
+  4,356-row corpus carries a non-`BR` `country`; the path remains
+  unit-tested only, and `maxInternationalPerRun` is still `null`.
 
 ### 2. Run n8n on Atlas
 

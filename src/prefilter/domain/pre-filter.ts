@@ -130,6 +130,12 @@ function isStillListedBySource(
  * of a bad date — a misparsed format, clock skew, or an outright wrong value
  * — and trusting it would let `ageMs` go negative and pass the recency check
  * unconditionally, regardless of how old the posting actually is.
+ *
+ * `stillListedMaxAgeDays` (ADR-066 Amendment 1) bounds the still-listed
+ * rescue below: past that age, "still listed" no longer overrides this rule
+ * and the posting falls through to the normal check. `null` disables the
+ * ceiling; `null` on `stillListedWithinHours` disables the whole rescue and
+ * restores the pre-ADR-066 behaviour exactly.
  */
 function isTooOld(
   posting: Posting,
@@ -138,18 +144,10 @@ function isTooOld(
   maxFutureSkewDays: number,
   now: Date,
   stillListedWithinHours: number | null = null,
+  stillListedMaxAgeDays: number | null = null,
 ): boolean {
   if (maxAgeDays === null) return false;
-  // ADR-066: direct evidence the posting is still open outranks every
-  // date-based estimate below it, including the cutover.
-  if (isStillListedBySource(posting, stillListedWithinHours, now)) return false;
-  if (
-    posting.publishedAt === null &&
-    undatedBacklogCutoverAt !== null &&
-    posting.firstSeenAt.getTime() <= undatedBacklogCutoverAt.getTime()
-  ) {
-    return true;
-  }
+
   const reference = hasImplausiblyFuturePublishedAt(
     posting,
     maxFutureSkewDays,
@@ -158,6 +156,24 @@ function isTooOld(
     ? posting.firstSeenAt
     : (posting.publishedAt ?? posting.firstSeenAt);
   const ageMs = now.getTime() - reference.getTime();
+
+  // ADR-066: direct evidence the posting is still open outranks every
+  // date-based estimate below it, including the cutover — up to the ceiling.
+  if (isStillListedBySource(posting, stillListedWithinHours, now)) {
+    const ceilingMs =
+      stillListedMaxAgeDays === null
+        ? null
+        : stillListedMaxAgeDays * 24 * 60 * 60 * 1000;
+    if (ceilingMs === null || ageMs <= ceilingMs) return false;
+  }
+
+  if (
+    posting.publishedAt === null &&
+    undatedBacklogCutoverAt !== null &&
+    posting.firstSeenAt.getTime() <= undatedBacklogCutoverAt.getTime()
+  ) {
+    return true;
+  }
   return ageMs > maxAgeDays * 24 * 60 * 60 * 1000;
 }
 
@@ -297,6 +313,7 @@ export function applyPreFilter(
       criteria.maxFutureSkewDays,
       now,
       criteria.stillListedWithinHours,
+      criteria.stillListedMaxAgeDays,
     )
   ) {
     return outcome(false, "too_old");

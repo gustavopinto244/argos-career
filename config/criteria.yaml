@@ -411,6 +411,28 @@ undatedBacklogCutoverAt: "2026-08-16T12:15:00Z"
 # evidence of closure. null disables this entirely.
 stillListedWithinHours: 30
 
+# ADR-066 Amendment 1, decided 2026-08-29 after the "measure it and decide"
+# note the original ADR left open. Three nights of production data
+# (2026-08-27/28/29) put 2-3 still-listed zombies past `maxAgeDays: 7` in
+# every single run, up to 314h (~13 days) old -- common, not hypothetical.
+# Zooming out to the whole still-listed corpus (`lastSeenAt` within the 30h
+# window above) sharpened the picture: median age ~13 days, but a real tail
+# past it -- 29 postings over 30 days old, 18 over 45, 11 over 60, and one
+# 424-day-old "Full Stack Developer" from Indeed that the title-requirement
+# gate would reject anyway. The oldest confirmed on-track case,
+# "Estagiário(a) de Tecnologia da Informação" (Indeed, Méier-RJ), sat at 71
+# days -- inside this ceiling, deliberately, since the original ADR-066 had
+# already accepted a 67-day-old case as a legitimate cost of the rescue.
+#
+# 90 days keeps every measured on-track zombie and cuts the part of the tail
+# that is old enough to be almost certainly closed or off-track already
+# (mostly full roles and cadastro-reserva postings past 90 days, none of them
+# internships this profile would apply to). Past this age, "still listed"
+# no longer overrides `maxAgeDays` and the posting falls through to the
+# normal too_old check. null disables the ceiling and restores the original,
+# unbounded rescue.
+stillListedMaxAgeDays: 90
+
 # ADR-068. Which country's postings can actually be taken, and how the nightly
 # scoring budget is split along that line.
 #

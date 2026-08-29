@@ -274,6 +274,21 @@ export const CriteriaSchema = z.object({
    */
   stillListedWithinHours: z.number().positive().nullable().default(null),
   /**
+   * Absolute ceiling on the ADR-066 rescue (Amendment 1): a posting past this
+   * age is `too_old` even when `lastSeenAt` says the source is still listing
+   * it. ADR-066 shipped with no ceiling, deliberately, pending a measurement
+   * of whether zombies (old-but-still-listed postings) turned out to be
+   * common; they did — the real corpus carries still-listed postings up to
+   * 424 days old, almost all off-track already, but a handful of genuine
+   * on-track ones ride the tail past 45 days too. `null` (the default)
+   * disables the ceiling and keeps the original unbounded rescue.
+   *
+   * Age is measured the same way `maxAgeDays` measures it — `publishedAt`
+   * when stated, `firstSeenAt` otherwise — so the ceiling and the rule it
+   * bounds agree on what "age" means.
+   */
+  stillListedMaxAgeDays: z.number().positive().nullable().default(null),
+  /**
    * The country a source's postings belong to when the posting itself states
    * none — ISO 3166-1 alpha-2, keyed by source name (ADR-068).
    *
