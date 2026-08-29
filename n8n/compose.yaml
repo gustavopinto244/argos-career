@@ -39,6 +39,17 @@ name: n8n
 # with no extra TLS layered on top; disabling the cookie's HTTPS requirement
 # here is the documented option for exactly this case (n8n's own /setup
 # error page names it), not a weakening of what actually protects the editor.
+#
+# `N8N_HOST`/`N8N_PORT`/`N8N_PROTOCOL`: without these n8n defaults to
+# `localhost` when it builds any URL that leaves the browser and comes back
+# — most importantly the OAuth2 redirect URI it shows on a credential (Gmail,
+# Google Sheets). A `localhost` redirect is wrong here: the browser doing the
+# OAuth dance is on a different machine than the one running n8n, so Google
+# would redirect back to a `localhost:5678` that has nothing listening on it.
+# Setting these three makes n8n advertise
+# `http://${ATLAS_TAILSCALE_IP}:5678/rest/oauth2-credential/callback` instead
+# — the address the browser can actually reach, and the one to register as
+# an authorized redirect URI on the Google Cloud OAuth client.
 services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
@@ -48,6 +59,9 @@ services:
       - GENERIC_TIMEZONE=America/Sao_Paulo
       - TZ=America/Sao_Paulo
       - N8N_SECURE_COOKIE=false
+      - N8N_HOST=${ATLAS_TAILSCALE_IP}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
     ports:
       - "${ATLAS_TAILSCALE_IP}:5678:5678"
     volumes:
