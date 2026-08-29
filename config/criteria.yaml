@@ -827,25 +827,16 @@ alerts:
   #              crying over a quiet weekend.
   #   indeed     its own systemd timer runs twice daily; 36h is a little
   #              over one missed run.
-  #   linkedin   REMOVED 2026-08-26 (ADR-064). It was 96h, set from the real
-  #              ingest cadence, and it fired correctly -- `linkedin` has
-  #              never delivered a posting, so `evaluateSourceFreshness`'s
-  #              "never delivered" branch matched on every collection run,
-  #              six times a day, about a fact that does not change between
-  #              runs. That is not a signal, it is a metronome, and its cost
-  #              is real: an alert channel nobody can bear to read stops
-  #              working for the outage it exists to catch.
-  #
-  #              This is NOT `catho`'s reasoning below. LinkedIn is deployed
-  #              and n8n is delivering (HTTP 201, 37 items over five runs);
-  #              every one is rejected at normalization instead. Removing
-  #              this line silences the symptom knowingly, and would leave
-  #              the loss invisible if it stood alone -- so it does not:
-  #              `linkShape` (same ADR) makes the next real ingest record
-  #              why, and B15 in docs/11 stays open until a `linkedin` row
-  #              appears in `postings`. Restore this window the day that
-  #              happens; a source that has delivered once can go stale, and
-  #              then the window is a signal again.
+  #   linkedin   RESTORED 2026-08-29 (docs/11 B15, resolved). Removed
+  #              2026-08-26 (ADR-064) because `evaluateSourceFreshness`'s
+  #              "never delivered" branch matched every collection run, six
+  #              times a day, about a fact that never changed -- a metronome,
+  #              not a signal. A real `linkedin` row now exists in `postings`
+  #              (two, in fact: source_id 4460144769 and 4460110391), so the
+  #              condition for restoring this line, stated at removal time,
+  #              is met: a source that has delivered once can now go stale,
+  #              and this window is what would catch it. 96h, set from the
+  #              real ingest cadence (n8n's schedule trigger runs once daily).
   #
   # `catho` is deliberately absent: it has never been deployed (B14), and
   # listing it would alert every cycle about a decision nobody has made yet.
@@ -874,3 +865,4 @@ alerts:
     ciee: 72
     infojobs: 72
     indeed: 36
+    linkedin: 96
