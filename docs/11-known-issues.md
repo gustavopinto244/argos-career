@@ -1810,6 +1810,17 @@ normalized: 0, unnormalizable: 0` — arithmetically impossible, and a large
 > **This entry stays open, and is now the only thing watching this source.**
 > It closes when a `source = 'linkedin'` row exists in Atlas's `postings`,
 > not before — and the freshness window goes back the same day.
+>
+> **n8n moves to Atlas (2026-08-29, ADR-030 Amendment 1).** Eight days after
+> `linkShape` shipped, no new delivery had arrived to populate it — the
+> instance producing these emails runs on the operator's own machine,
+> outside anything this repository can inspect directly. Getting the real
+> answer this entry has been waiting on requires seeing what n8n's own
+> execution log actually captured for the anchor `href` in a real LinkedIn
+> alert email — not a further hypothesis from this side of the boundary.
+> Hosting n8n on Atlas (`n8n/compose.yaml`) makes that execution log
+> directly inspectable for the first time. Still open until a real
+> `linkedin` row lands.
 
 ---
 

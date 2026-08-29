@@ -128,3 +128,43 @@ postings) or a third public caller needs distinguishing from n8n.
 
 **Reversal cost:** low for the network path (see Easy). Not low for the
 exposure itself while it exists — see Hard.
+
+## Amendment 1 — n8n moves to Atlas, the tunnel becomes removable (2026-08-29)
+
+The premise this whole ADR rested on was singular: "n8n runs on n8n.cloud, a
+SaaS instance with no shell access... there is no host to install [Tailscale]
+on." That premise no longer holds by choice, not by n8n.cloud changing
+anything — the operator decided to run n8n themselves, on Atlas, specifically
+so the LinkedIn workflow's real output becomes inspectable (`docs/10-
+milestones.md`, "Next up — agreed 2026-08-27", item 2), closing out
+`docs/11-known-issues.md` B15.
+
+`n8n/compose.yaml` runs it as its own compose project, independent of
+`argos-career`'s (ADR-008: n8n is never the orchestrator, stopping it must
+never affect a collect/score/deliver run), bound to Atlas's Tailscale
+interface the same way `compose.production.yaml` already is. Once it is
+running there, n8n is a same-tailnet caller exactly like Hermes — it reaches
+`https://${ATLAS_TAILSCALE_IP}:${API_PORT}/runs/collect/external` with the
+same `Authorization: Bearer <API_KEY>`, no public hostname involved.
+
+**This does not happen automatically and is not yet done.** The exported
+workflow JSON carries only credential _names_ and _ids_ — the actual Gmail
+and Google Sheets OAuth2 grants, and the HTTP bearer-token credential, must
+be re-authorized by hand in the new instance's editor UI (reachable over
+Tailscale only, matching this compose file's binding), and the "Send Jobs
+JSON" node's URL must be repointed from `argos-api.gustavopinto.dev.br` to
+the Tailscale address above.
+
+**Once that is confirmed working — not before —** this ADR's whole
+Cloudflare Tunnel route becomes exactly the kind of removable, low-cost
+reversal its own Consequences section already described: delete the
+`argos-api.gustavopinto.dev.br` ingress rule (both the harmless local
+`config.yml` line and the dashboard-side route the ADR's own Correction
+found actually governs it) and its DNS record, restart `cloudflared`.
+Nothing in application code references this hostname either way.
+
+This closes the "Hard" cost stated above, not just relocates it: the entire
+API stops being reachable from the public internet through this hostname,
+and `API_KEY` goes back to gating only tailnet callers (Hermes and, now,
+n8n) — the property ADR-017 originally chose and this ADR had to trade away
+for a caller that no longer exists in this shape.
