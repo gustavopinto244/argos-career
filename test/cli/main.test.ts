@@ -3030,6 +3030,45 @@ describe("executeListPostings (ADR-072) — the Hermes-facing corpus query", () 
     expect(notApplied.postings[0]?.fingerprint).not.toBe(first!.fingerprint);
   });
 
+  it("never surfaces a discarded posting — the contract discard_posting promises", async () => {
+    // `loadCorpus` is built on `findActive`, which deliberately keeps
+    // discarded rows for dedup and M10's aggregates. This endpoint is a
+    // human-facing shortlist, so it must re-apply the discard rule itself,
+    // or `discard_posting`'s "never surfaced again" is false.
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: [
+        {
+          source: "gupy",
+          sourceId: "1",
+          payload: gupyPayload(1, "Estágio em Backend"),
+        },
+        {
+          source: "gupy",
+          sourceId: "2",
+          payload: gupyPayload(2, "Estágio em Frontend"),
+        },
+      ],
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+    const repo = new PostingsRepository(db);
+    const [discarded, kept] = repo.findActive();
+    repo.discard(discarded!.fingerprint, new Date(), "not for me");
+
+    const outcome = executeListPostings(
+      db,
+      deliverCriteria(),
+      deliverProfile(),
+      {},
+    );
+
+    expect(outcome.total).toBe(1);
+    expect(outcome.postings.map((p) => p.fingerprint)).toEqual([
+      kept!.fingerprint,
+    ]);
+  });
+
   it("filters by verdict and reports a real score, computed the same way MarketRepository would", async () => {
     const collector = stubCollector({
       source: "gupy",

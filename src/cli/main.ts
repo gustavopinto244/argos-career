@@ -56,6 +56,7 @@ import { ScorerPort } from "../scoring/domain/ports/scorer.port";
 import { EMPTY_RECOMMENDATION } from "../scoring/domain/recommendation";
 import { scoreFailureOutcome, Verdict } from "../scoring/domain/types";
 import { buildScorer } from "../scoring/infrastructure/build-scorer";
+import { resolveScoringTracks } from "../scoring/infrastructure/api-scorer";
 import { computeScore } from "../scoring/domain/score";
 import { buildScoringConfig } from "../scoring/infrastructure/scoring-config";
 import {
@@ -1709,6 +1710,20 @@ export interface ListPostingsOutcome {
  * reads the whole active corpus for the market/study-plan paths, and
  * `docs/11-known-issues.md`'s own supply measurements put the real corpus in
  * the low thousands, not a range that needs a second, SQL-side query path.
+ *
+ * **Discarded postings are excluded here**, which `loadCorpus` does not do
+ * on its own: it is built on `findActive`, which keeps discards because
+ * dedup and M10's aggregates both need them. This is a shortlist read by a
+ * human through Hermes, and `discard_posting` promises the posting is
+ * "never surfaced again" — honouring that is this function's job, not
+ * `loadCorpus`'s.
+ *
+ * Tracks come from `resolveScoringTracks`, the same function `ApiScorer`
+ * uses, rather than a bare `classifyTrack(title)`. The two agree today only
+ * because `rejectUnknownTrack: true` means nothing title-unclassifiable ever
+ * reaches the scorer; sharing the function means they keep agreeing if that
+ * flag is ever flipped, instead of this endpoint silently reporting a
+ * different score than the digest for the same posting.
  */
 export function executeListPostings(
   db: Db,
@@ -1723,7 +1738,9 @@ export function executeListPostings(
     profileHash,
     model,
   );
-  const appliedAtByFingerprint = new PostingsRepository(db).findAppliedAtMap();
+  const postingsRepo = new PostingsRepository(db);
+  const appliedAtByFingerprint = postingsRepo.findAppliedAtMap();
+  const discardedFingerprints = postingsRepo.findDiscardedFingerprints();
   const scoringConfig = buildScoringConfig(criteria);
   const sinceMs =
     params.sinceDays !== undefined
@@ -1731,11 +1748,16 @@ export function executeListPostings(
       : null;
 
   const listed = entries
+    .filter((entry) => !discardedFingerprints.has(entry.posting.fingerprint))
     .map((entry): ListedPosting => {
-      const tracks = classifyTrack(
-        entry.posting.title,
-        criteria.tracks,
-        criteria.trackExclusions,
+      const tracks = resolveScoringTracks(
+        classifyTrack(
+          entry.posting.title,
+          criteria.tracks,
+          criteria.trackExclusions,
+        ),
+        entry.requirements,
+        criteria,
       );
       const score = entry.matches
         ? computeScore(entry.matches, tracks, scoringConfig).score
