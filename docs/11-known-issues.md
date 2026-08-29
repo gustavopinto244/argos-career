@@ -1676,7 +1676,7 @@ these, keep discarding them" rather than a code change at all.
 
 ## B15 — LinkedIn's real n8n ingest was silently discarded, 100%, since it started
 
-**Status:** fixed, pending confirmation against the next real delivery ·
+**Status:** resolved, 2026-08-29 — two real postings landed ·
 **Found:** 2026-08-23, investigating why the corpus has zero LinkedIn
 postings despite ADR-029 shipping weeks earlier
 
@@ -1821,6 +1821,33 @@ normalized: 0, unnormalizable: 0` — arithmetically impossible, and a large
 > Hosting n8n on Atlas (`n8n/compose.yaml`) makes that execution log
 > directly inspectable for the first time. Still open until a real
 > `linkedin` row lands.
+>
+> **Resolved, 2026-08-29, same day — and the `link` field was never the
+> problem.** With the real n8n execution log inspectable for the first time,
+> `linkShape` on the very next real delivery read `hasJobsViewPath: true`,
+> `pathTemplate: "/jobs/view/<digits>"` — the link was clean the whole time.
+> The actual defect was one level upstream, inside n8n's own extraction
+> script, invisible from this repository's side of the boundary no matter
+> how much diagnostic metadata was added to it: `normalizeLinkedinAlertJob`
+> was correctly rejecting an **empty `Company` field**
+> (`LinkedinAlertJobSchema` requires `company: z.string().min(1)`), and the
+> extraction script's company/location parser —
+> `html.slice(matchEnd, matchEnd + 400)` followed by a split on
+> `\s{2,}|·|•|\|` — never reached the real text. LinkedIn's actual email
+> HTML is dense enough with inline CSS (100+ characters of repeated style
+> attributes per `<td>`) that the 400-character window exhausted itself on
+> tag soup before ever reaching the `<p class="text-system-gray-100...">`
+> tag carrying "Company · Location (Mode)" — and separately, that text uses
+> the HTML entity `&middot;`, not the literal `·` character the split regex
+> looked for, which would have broken the split even had the window been
+> wide enough. Fixed by targeting that specific `<p>` tag directly with a
+> regex instead of guessing a character offset, and widening the window to
+> 3000 characters as a margin — both changes live only in the operator's n8n
+> workflow, not this repository. Confirmed with two real postings landing in
+> `postings` (`Estágiario de TI`, Rio Diesel Veículos e Peças, source_id
+> `4460144769`; `ESTAGIÁRIO DE PLANEJAMENTO`, Engemon Engenharia &
+> Construção, source_id `4460110391`). `sourceFreshnessHours.linkedin: 96`
+> restored the same day, per the plan above.
 
 ---
 

@@ -147,13 +147,19 @@ running there, n8n is a same-tailnet caller exactly like Hermes — it reaches
 `https://${ATLAS_TAILSCALE_IP}:${API_PORT}/runs/collect/external` with the
 same `Authorization: Bearer <API_KEY>`, no public hostname involved.
 
-**This does not happen automatically and is not yet done.** The exported
-workflow JSON carries only credential _names_ and _ids_ — the actual Gmail
-and Google Sheets OAuth2 grants, and the HTTP bearer-token credential, must
-be re-authorized by hand in the new instance's editor UI (reachable over
-Tailscale only, matching this compose file's binding), and the "Send Jobs
-JSON" node's URL must be repointed from `argos-api.gustavopinto.dev.br` to
-the Tailscale address above.
+**Done, 2026-08-29, same day.** The exported workflow JSON carried only
+credential _names_ and _ids_, so the actual Gmail and Google Sheets OAuth2
+grants and the HTTP bearer-token credential were re-authorized by hand in the
+new instance's editor UI — reachable, in the end, over `https://atlas.<
+tailnet>.ts.net` via `tailscale serve` rather than the plain Tailscale IP
+this ADR originally described: Google's own OAuth client setup rejects a
+redirect URI whose host is a bare IP literal, so a real domain and real
+HTTPS were both required, not just Tailscale reachability. The "Send Jobs
+JSON" node's URL was repointed to `http://100.84.48.40:3000/runs/collect/
+external` (plain HTTP — ArgosCareer's API has no TLS of its own, same as
+every other Tailscale-only surface in this project). Confirmed working: two
+real LinkedIn postings landed in `postings` the same day (docs/11
+known-issues.md B15, resolved).
 
 **Once that is confirmed working — not before —** this ADR's whole
 Cloudflare Tunnel route becomes exactly the kind of removable, low-cost

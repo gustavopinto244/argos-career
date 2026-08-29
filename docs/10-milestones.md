@@ -555,19 +555,41 @@ plus `npm run report:supply -- --weeks 2` over the real corpus:
   4,356-row corpus carries a non-`BR` `country`; the path remains
   unit-tested only, and `maxInternationalPerRun` is still `null`.
 
-### 2. Run n8n on Atlas
+### 2. Run n8n on Atlas — DONE, 2026-08-29
 
-Today n8n lives on the operator's own infrastructure, off Atlas, and its
-only job is feeding LinkedIn alert emails into `/runs/collect/external`.
+Moved n8n from the operator's own machine to Atlas (`n8n/compose.yaml`,
+ADR-030 Amendment 1), specifically to make the LinkedIn workflow's real
+execution log inspectable. It closed docs/11 B15 the same day, and the real
+root cause was not what the receiving side's diagnostics could have found:
 
-**Why this is next, concretely:** LinkedIn has never landed a posting —
-37 items received across five real ingest runs, 37 rejected (docs/11 B15).
-The cause is narrowed to one field: `normalizeLinkedinAlertJob` rejects when
-`deriveSourceIdFromLink` finds no `/jobs/view/<digits>` in `link`. ADR-064
-added `linkShape` so the next real delivery records the masked shape of that
-value, but **no new delivery has arrived since**. With n8n on Atlas the
-workflow's actual output becomes inspectable directly, which collapses a
-wait-and-see into a look-and-fix.
+- `linkShape` on the first real post-migration delivery read
+  `hasJobsViewPath: true` — the `link` field was clean the whole time,
+  clearing the hypothesis ADR-064 was built to test.
+- The actual defect was one step upstream, inside n8n's own extraction
+  script: a company/location parser that sliced a fixed 400-character window
+  of raw HTML, which LinkedIn's real, CSS-bloated email markup exhausted
+  before ever reaching the actual text, plus a separator regex that missed
+  the `&middot;` HTML entity the real markup uses instead of a literal `·`.
+  Both fixed in the operator's own n8n workflow, not this repository.
+- Two real postings confirmed landing in `postings`: `Estágiario de TI`
+  (Rio Diesel Veículos e Peças, source_id `4460144769`) and `ESTAGIÁRIO DE
+PLANEJAMENTO` (Engemon Engenharia & Construção, source_id `4460110391`).
+  `sourceFreshnessHours.linkedin: 96` restored in `config/criteria.yaml`.
+
+Also surfaced along the way, all fixed in `n8n/compose.yaml`: n8n's default
+secure-cookie requirement blocked the editor over plain HTTP; the OAuth2
+redirect URL n8n advertised needed `WEBHOOK_URL` (not `N8N_EDITOR_BASE_URL`,
+which alone was not enough); and Google's own OAuth client setup rejects a
+redirect URI whose host is a bare IP literal, which is why the editor is
+reachable at `https://atlas.taildc52b0.ts.net` (via `tailscale serve`, a
+one-time Atlas-side command, not tracked in this repo) rather than the plain
+Tailscale IP originally planned. Real measured footprint: 813 MiB at rest,
+closing ADR-008's "unmeasured" note.
+
+**Not yet done:** removing the now-unnecessary `argos-api.gustavopinto.dev.br`
+Cloudflare Tunnel route (ADR-030's whole reason for existing was n8n.cloud
+having no way to join the tailnet, which no longer applies) — deferred to a
+separate, deliberate step since it touches live Cloudflare configuration.
 
 Worth carrying over: ADR-008 places n8n behind `N8nCollector` as a P3
 long-tail source and **never as the orchestrator, never on the critical

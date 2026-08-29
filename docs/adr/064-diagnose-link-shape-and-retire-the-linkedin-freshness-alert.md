@@ -145,3 +145,18 @@ Reversal is cheap in both halves: one line restores the freshness window, and
 thing that is _not_ cheap to reverse is the boundary — if a later change
 starts recording link values to "just check something," this ADR's reasoning
 is what it has to argue against first.
+
+## Amendment 1 — the reversal happened, and `linkShape` cleared the actual
+
+suspect (2026-08-29)
+
+Both halves of the "cheap to reverse" claim above were exercised for real,
+the same day n8n moved to Atlas (ADR-030 Amendment 1). `linkShape` on the
+first real post-migration delivery read `hasJobsViewPath: true`,
+`pathTemplate: "/jobs/view/<digits>"` — the diagnostic this ADR built did its
+job and cleared `link` as a suspect. The real defect was one step earlier,
+inside the n8n workflow's own extraction script (an off-by-window-size bug in
+its company/location parser, fixed in the operator's workflow — outside this
+repository), invisible to any diagnostic this ADR could have added on the
+receiving side. `sourceFreshnessHours.linkedin: 96` is restored in
+`config/criteria.yaml`, and B15 is closed in `docs/11-known-issues.md`.
