@@ -25,6 +25,7 @@ function baseCriteria(overrides: Partial<Criteria> = {}): Criteria {
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
     stillListedWithinHours: null,
+    stillListedMaxAgeDays: null,
     sourceDefaultCountry: {},
     homeCountry: "BR",
     maxInternationalPerRun: null,
@@ -425,6 +426,126 @@ describe("applyPreFilter — stillListedWithinHours (ADR-066)", () => {
       NOW,
     );
     expect(outcome.reason).toBe("location_not_allowed");
+  });
+});
+
+describe("applyPreFilter — stillListedMaxAgeDays (ADR-066 Amendment 1)", () => {
+  const HOUR = 60 * 60 * 1000;
+  const DAY = 24 * HOUR;
+  const old = (days: number) => new Date(NOW.getTime() - days * DAY);
+  const seenAgo = (hours: number) => new Date(NOW.getTime() - hours * HOUR);
+
+  it("does nothing when null (the default) — the rescue stays unbounded", () => {
+    // The real 424-day-old zombie, with no ceiling set.
+    const outcome = applyPreFilter(
+      posting({
+        publishedAt: old(424),
+        firstSeenAt: old(424),
+        lastSeenAt: seenAgo(1),
+      }),
+      baseCriteria({
+        maxAgeDays: 7,
+        stillListedWithinHours: 30,
+        stillListedMaxAgeDays: null,
+      }),
+      [],
+      NOW,
+    );
+    expect(outcome.passed).toBe(true);
+  });
+
+  it("still rescues a posting inside the ceiling", () => {
+    // The real on-track case: "Estagiário(a) de Tecnologia da Informação"
+    // (Indeed, Méier-RJ), 71 days old and still listed.
+    const outcome = applyPreFilter(
+      posting({
+        publishedAt: old(71),
+        firstSeenAt: old(71),
+        lastSeenAt: seenAgo(1),
+      }),
+      baseCriteria({
+        maxAgeDays: 7,
+        stillListedWithinHours: 30,
+        stillListedMaxAgeDays: 90,
+      }),
+      [],
+      NOW,
+    );
+    expect(outcome.passed).toBe(true);
+  });
+
+  it("stops rescuing once the posting is older than the ceiling", () => {
+    const outcome = applyPreFilter(
+      posting({
+        publishedAt: old(120),
+        firstSeenAt: old(120),
+        lastSeenAt: seenAgo(1),
+      }),
+      baseCriteria({
+        maxAgeDays: 7,
+        stillListedWithinHours: 30,
+        stillListedMaxAgeDays: 90,
+      }),
+      [],
+      NOW,
+    );
+    expect(outcome.reason).toBe("too_old");
+  });
+
+  it("treats the ceiling as inclusive at its exact boundary", () => {
+    const at = applyPreFilter(
+      posting({
+        publishedAt: old(90),
+        firstSeenAt: old(90),
+        lastSeenAt: seenAgo(1),
+      }),
+      baseCriteria({
+        maxAgeDays: 7,
+        stillListedWithinHours: 30,
+        stillListedMaxAgeDays: 90,
+      }),
+      [],
+      NOW,
+    );
+    expect(at.passed).toBe(true);
+
+    const justPast = applyPreFilter(
+      posting({
+        publishedAt: new Date(old(90).getTime() - 1),
+        firstSeenAt: new Date(old(90).getTime() - 1),
+        lastSeenAt: seenAgo(1),
+      }),
+      baseCriteria({
+        maxAgeDays: 7,
+        stillListedWithinHours: 30,
+        stillListedMaxAgeDays: 90,
+      }),
+      [],
+      NOW,
+    );
+    expect(justPast.reason).toBe("too_old");
+  });
+
+  it("still falls through to undatedBacklogCutoverAt once past the ceiling", () => {
+    // Past the ceiling, the rescue no longer applies and the older,
+    // stricter rule (an undated posting from before the cutover) governs.
+    const CUTOVER = new Date(NOW.getTime() - 200 * DAY);
+    const outcome = applyPreFilter(
+      posting({
+        publishedAt: null,
+        firstSeenAt: old(300),
+        lastSeenAt: seenAgo(1),
+      }),
+      baseCriteria({
+        maxAgeDays: 7,
+        undatedBacklogCutoverAt: CUTOVER,
+        stillListedWithinHours: 30,
+        stillListedMaxAgeDays: 90,
+      }),
+      [],
+      NOW,
+    );
+    expect(outcome.reason).toBe("too_old");
   });
 });
 

@@ -21,6 +21,7 @@ function criteria(overrides: Partial<Criteria> = {}): Criteria {
     maxAgeDays: null,
     undatedBacklogCutoverAt: null,
     stillListedWithinHours: null,
+    stillListedMaxAgeDays: null,
     sourceDefaultCountry: {},
     homeCountry: "BR",
     maxInternationalPerRun: null,
