@@ -232,7 +232,15 @@ export class McpController {
           fingerprint: z.string().describe("The posting's fingerprint."),
         },
       },
-      ({ fingerprint }) => safely(() => this.postings.markApplied(fingerprint)),
+      ({ fingerprint }) =>
+        safely(() => {
+          // Same reason `discard_posting` gates below: `ApiKeyGuard`
+          // allowlists `POST /mcp` for an `automation` principal but not
+          // `/postings/*`, so without this an automation key could mutate
+          // through MCP exactly what it is denied over REST.
+          requirePrincipalKind(principal, ["admin"]);
+          return this.postings.markApplied(fingerprint);
+        }),
     );
 
     server.registerTool(
@@ -244,7 +252,10 @@ export class McpController {
         },
       },
       ({ fingerprint }) =>
-        safely(() => this.postings.unmarkApplied(fingerprint)),
+        safely(() => {
+          requirePrincipalKind(principal, ["admin"]);
+          return this.postings.unmarkApplied(fingerprint);
+        }),
     );
 
     server.registerTool(

@@ -211,9 +211,12 @@ export class PostingsRepository {
    * run log cannot distinguish "delivered nothing" from "was never asked".
    * A posting's `lastSeenAt` is true regardless of how it arrived.
    *
-   * Discarded postings are excluded for the same reason every other read
-   * here excludes them — a manually discarded posting is not evidence the
-   * source is alive today.
+   * Discarded postings are excluded for the same reason the pipeline reads
+   * (`findUnnotified`, `claimForScoring`) exclude them — a manually
+   * discarded posting is not evidence the source is alive today. Note this
+   * is not universal: `findActive` deliberately keeps discards, so it is a
+   * rule each read applies for its own reason, not an invariant of this
+   * class.
    */
   findLastSeenAtBySource(): Record<string, Date> {
     const rows = this.db
@@ -322,6 +325,16 @@ export class PostingsRepository {
    * for the similarity dedup layer (ADR-0010). A posting already marked
    * duplicate is excluded rather than compared again; only canonical
    * postings are compared against each other.
+   *
+   * **Discarded postings are deliberately included**, unlike every read that
+   * feeds the pipeline. Both callers want them: dedup must still compare
+   * against a discarded posting or an incoming re-post of it would look
+   * novel, and M10's aggregate analysis reads the whole corpus by design —
+   * "the corpus is not a cache" (`docs/05-domain-model.md`). A caller
+   * building a *shortlist* for a human rather than an aggregate must
+   * therefore filter discards itself, via `findDiscardedFingerprints` —
+   * `executeListPostings` does, because `discard_posting` promises the
+   * posting is never surfaced again.
    */
   findActive(): Posting[] {
     const rows = this.db
@@ -617,8 +630,11 @@ export class PostingsRepository {
     return result.changes > 0;
   }
 
-  /** Clears the bookmark `markApplied` set. `false` for a fingerprint that
-   * does not exist or was never marked applied. */
+  /** Clears the bookmark `markApplied` set. `false` only for a fingerprint
+   * that does not exist — a posting that exists but was never marked returns
+   * `true`, the same idempotent contract `discard` has, so unmarking twice is
+   * not an error. `PostingsService.unmarkApplied` depends on that: a second
+   * unmark must not surface as a 404. */
   unmarkApplied(fingerprint: string): boolean {
     const result = this.db
       .update(postings)
@@ -637,6 +653,27 @@ export class PostingsRepository {
       .where(eq(postings.fingerprint, fingerprint))
       .get();
     return exists !== undefined;
+  }
+
+  /**
+   * Every fingerprint a human has discarded — read once by
+   * `executeListPostings` for the same batching reason as
+   * `findAppliedAtMap`.
+   *
+   * This exists because `findActive` deliberately does *not* filter
+   * `discardedAt`: it is the dedup layer's candidate pool (ADR-010) and
+   * M10's aggregate corpus, and both want every canonical row, discarded or
+   * not — "the corpus is not a cache" (`docs/05-domain-model.md`). Every
+   * other read here does exclude discards, so a consumer reading through
+   * `findActive` has to re-apply that rule itself rather than assume it.
+   */
+  findDiscardedFingerprints(): Set<string> {
+    const rows = this.db
+      .select({ fingerprint: postings.fingerprint })
+      .from(postings)
+      .where(isNotNull(postings.discardedAt))
+      .all();
+    return new Set(rows.map((row) => row.fingerprint));
   }
 
   /**

@@ -32,6 +32,7 @@ import {
 import { createPosting } from "../../../src/posting/domain/posting";
 
 const API_KEY = "test-api-key-for-mcp-suite";
+const AUTOMATION_KEY = "test-automation-key-for-mcp-suite";
 
 /** No real Gupy/Telegram request in this suite — same reasoning as
  * runs.controller.test.ts's fakes. */
@@ -60,12 +61,14 @@ let app: INestApplication;
 let db: Db;
 let env: NodeJS.ProcessEnv;
 let client: Client;
+let port: number;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "argos-mcp-"));
   env = { ...process.env };
   process.env.DATABASE_PATH = join(dir, "argos.db");
   process.env.API_KEY = API_KEY;
+  process.env.API_AUTOMATION_KEY = AUTOMATION_KEY;
   process.env.SCORER_ADAPTER = "stub";
   process.env.PROFILE_PATH = "./config/profile.example.yaml";
 
@@ -83,7 +86,7 @@ beforeEach(async () => {
   // IPv4 loopback: an unqualified `listen(0)` can bind IPv6-only on some
   // hosts, which the client then can't reach via the "127.0.0.1" URL below.
   await app.listen(0, "127.0.0.1");
-  const port = (app.getHttpServer().address() as AddressInfo).port;
+  port = (app.getHttpServer().address() as AddressInfo).port;
 
   db = createDatabase(process.env.DATABASE_PATH);
   runMigrations(db);
@@ -290,6 +293,63 @@ describe("MCP server", () => {
       arguments: { fingerprint: "does-not-exist" },
     });
     expect(result.isError).toBe(true);
+  });
+
+  describe("an automation principal cannot mutate posting state over MCP", () => {
+    // `ApiKeyGuard` allowlists `POST /mcp` for an automation key but not
+    // `/postings/*`, so these mutations are admin-only over REST. Without a
+    // per-tool check, MCP would be a way around that path-based policy —
+    // the reason `discard_posting` carries `requirePrincipalKind`, and the
+    // reason the two applied-bookmark tools now do too.
+    async function automationClient(): Promise<Client> {
+      const automation = new Client({ name: "auto", version: "1.0.0" });
+      const transport = new StreamableHTTPClientTransport(
+        new URL(`http://127.0.0.1:${port}/mcp`),
+        {
+          requestInit: {
+            headers: { Authorization: `Bearer ${AUTOMATION_KEY}` },
+          },
+        },
+      );
+      await automation.connect(transport as unknown as Transport);
+      return automation;
+    }
+
+    it.each(["mark_applied", "unmark_applied", "discard_posting"])(
+      "refuses %s",
+      async (name) => {
+        const stored = seedPosting("1", "Estágio em Backend");
+        const automation = await automationClient();
+        try {
+          const result = await automation.callTool({
+            name,
+            arguments: { fingerprint: stored.fingerprint },
+          });
+          expect(result.isError).toBe(true);
+        } finally {
+          await automation.close();
+        }
+        // The state it was denied is genuinely unchanged — not merely an
+        // error returned after the write landed.
+        const repo = new PostingsRepository(db);
+        expect(repo.findAppliedAtMap().size).toBe(0);
+        expect(repo.findDiscardedFingerprints().size).toBe(0);
+      },
+    );
+
+    it("still allows the read-only tools it is entitled to", async () => {
+      seedPosting("1", "Estágio em Backend");
+      const automation = await automationClient();
+      try {
+        const result = await automation.callTool({
+          name: "list_postings",
+          arguments: {},
+        });
+        expect(result.isError).toBeFalsy();
+      } finally {
+        await automation.close();
+      }
+    });
   });
 
   function seedPosting(fingerprintSourceId: string, title: string) {
