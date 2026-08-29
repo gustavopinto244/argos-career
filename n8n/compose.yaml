@@ -40,16 +40,21 @@ name: n8n
 # here is the documented option for exactly this case (n8n's own /setup
 # error page names it), not a weakening of what actually protects the editor.
 #
-# `N8N_HOST`/`N8N_PORT`/`N8N_PROTOCOL`: without these n8n defaults to
-# `localhost` when it builds any URL that leaves the browser and comes back
-# — most importantly the OAuth2 redirect URI it shows on a credential (Gmail,
-# Google Sheets). A `localhost` redirect is wrong here: the browser doing the
-# OAuth dance is on a different machine than the one running n8n, so Google
-# would redirect back to a `localhost:5678` that has nothing listening on it.
-# Setting these three makes n8n advertise
-# `http://${ATLAS_TAILSCALE_IP}:5678/rest/oauth2-credential/callback` instead
-# — the address the browser can actually reach, and the one to register as
-# an authorized redirect URI on the Google Cloud OAuth client.
+# `N8N_EDITOR_BASE_URL`: without it n8n defaults to `localhost` when it
+# builds any URL that leaves the browser and comes back — most importantly
+# the OAuth2 redirect URI shown on a credential (Gmail, Google Sheets). A
+# `localhost` redirect is wrong here: the browser doing the OAuth dance is a
+# different machine than the one running n8n. A bare Tailscale IP does not
+# fix it either — Google's own OAuth client setup rejects a redirect URI
+# whose host is not a real registered domain (an IP literal fails
+# "must end in a public top-level domain"). The actual fix needed a real
+# name and HTTPS: `tailscale serve --bg --https=443
+# http://${ATLAS_TAILSCALE_IP}:5678` (one-time, run on Atlas itself, not
+# tracked here — Tailscale state, not container config) terminates TLS with
+# a real cert for Atlas's own MagicDNS name and tailnet-only proxies it to
+# n8n, so `https://atlas.<tailnet>.ts.net/rest/oauth2-credential/callback`
+# is both a real domain and real HTTPS, and is what to register on the
+# Google Cloud OAuth client.
 services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
@@ -59,9 +64,7 @@ services:
       - GENERIC_TIMEZONE=America/Sao_Paulo
       - TZ=America/Sao_Paulo
       - N8N_SECURE_COOKIE=false
-      - N8N_HOST=${ATLAS_TAILSCALE_IP}
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
+      - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL}
     ports:
       - "${ATLAS_TAILSCALE_IP}:5678:5678"
     volumes:
