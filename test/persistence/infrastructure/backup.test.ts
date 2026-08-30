@@ -112,6 +112,48 @@ describe("backupDatabase", () => {
     expect(lastResult?.deletedOldBackups).toHaveLength(1);
   });
 
+  it("does not let an operator's ad-hoc snapshot consume a retention slot", () => {
+    const databasePath = join(dir, "argos.db");
+    migratedDb(databasePath);
+    const backupsDir = join(dir, "backups");
+    mkdirSync(backupsDir, { recursive: true });
+
+    // Real filenames from Atlas. They share the `argos-` prefix, and the
+    // character after it is a letter where a nightly backup has a digit — so
+    // they sort ABOVE every dated backup, and `enforceRetention` keeps the
+    // first `retention` by name. Measured on production 2026-08-30: eight
+    // files matched, three of them ad-hoc, leaving 4 real nightly backups
+    // where retention = 7 promises seven.
+    const adHoc = [
+      "argos-predeploy-2026-08-23T18-11-28-540Z.db",
+      "argos-pre-backfill-2026-08-30T12-27-05-723Z.db",
+    ];
+    for (const name of adHoc) writeFileSync(join(backupsDir, name), "snapshot");
+
+    let lastResult;
+    for (const day of ["13", "14", "15", "16"]) {
+      lastResult = backupDatabase(
+        databasePath,
+        backupsDir,
+        () => new Date(`2026-08-${day}T03:00:00.000Z`),
+        2,
+      );
+    }
+
+    const remaining = readdirSync(backupsDir).sort();
+    const nightly = remaining.filter((n) => /^argos-\d{4}-/.test(n));
+
+    // Retention counts nightly backups only, so both slots hold real ones.
+    expect(nightly).toHaveLength(2);
+    expect(nightly[0]).toContain("2026-08-15");
+    expect(nightly[1]).toContain("2026-08-16");
+    // And a snapshot a human took on purpose is never auto-deleted.
+    for (const name of adHoc) {
+      expect(existsSync(join(backupsDir, name))).toBe(true);
+    }
+    expect(lastResult?.deletedOldBackups).toHaveLength(1);
+  });
+
   it("does not delete unrelated files in the backups directory", () => {
     const databasePath = join(dir, "argos.db");
     migratedDb(databasePath);

@@ -410,7 +410,45 @@ export const CriteriaSchema = z.strictObject({
     .object({
       collection: z
         .object({
-          intervalHours: z.number().positive().default(4),
+          /**
+           * A whole number of hours that divides 24 evenly: 1, 2, 3, 4, 6, 8,
+           * 12 or 24.
+           *
+           * `collectionCronExpression` renders this as an hour-field step
+           * (`0 <star>/N <star> <star> <star>`, spelled out to keep this
+           * comment from closing on the cron syntax itself), and a cron step
+           * restarts at every day boundary rather than carrying
+           * across it — so anything else silently produces a schedule that is
+           * not what the setting's name says. Measured against the real `cron`
+           * parser this project uses:
+           *
+           * | value | fires at              | actual last gap |
+           * | ----- | --------------------- | --------------- |
+           * | 4     | 00 04 08 12 16 20     | 4h ✓            |
+           * | 5     | 00 05 10 15 20        | **4h**          |
+           * | 7     | 00 07 14 21           | **3h**          |
+           * | 25    | 00 (daily)            | **24h**         |
+           * | 4.5   | throws at boot        | —               |
+           *
+           * `positive()` alone accepted all of them. The last one at least
+           * failed loudly, though with `Field (hour) cannot be parsed` rather
+           * than anything naming this setting; the middle three ran happily on
+           * a schedule nobody asked for. `docs/09-configuration.md` rule 1
+           * wants configuration to fail at startup, and this is where it can
+           * fail while still able to say which setting is wrong and why.
+           */
+          intervalHours: z
+            .number()
+            .int("intervalHours must be a whole number of hours")
+            .min(1)
+            .max(24)
+            .refine((hours) => 24 % hours === 0, {
+              message:
+                "intervalHours must divide 24 evenly (1, 2, 3, 4, 6, 8, 12 or 24) — " +
+                "a cron hour step restarts at midnight, so any other value " +
+                "produces a shorter final interval each day",
+            })
+            .default(4),
         })
         .default({ intervalHours: 4 }),
       scoreAndDeliver: z
