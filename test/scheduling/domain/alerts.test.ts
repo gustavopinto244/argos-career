@@ -338,3 +338,70 @@ describe("evaluateSourceFreshness (docs/11-known-issues.md B13)", () => {
     expect(alerts[1]?.text).toContain('"indeed"');
   });
 });
+
+describe("collection-health alerts must not name a single source (2026-08-30)", () => {
+  // Both messages used to be prefixed `gupy:` — true when written and Gupy
+  // was the only collector, stale since. `config/criteria.yaml` now issues 20
+  // queries across four pulled sources, and one `collect` run covers all of
+  // them. An operator woken by "gupy: 3 consecutive collection runs errored"
+  // would go and check the one source that may have been fine.
+  it("does not name gupy when every source found nothing", () => {
+    const alerts = evaluateCollectionHealth(
+      [run({ collectedCount: 0 }), run({ collectedCount: 0 })],
+      2,
+    );
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.text).not.toContain("gupy");
+    expect(alerts[0]?.text).toContain("across every source");
+    expect(alerts[0]?.key).toBe("collection:empty");
+  });
+
+  it("names the sources that actually failed, from failed_sources", () => {
+    const alerts = evaluateCollectionHealth(
+      [
+        run({ outcome: "failed", failedSources: JSON.stringify(["nerdin"]) }),
+        run({
+          outcome: "failed",
+          failedSources: JSON.stringify(["ciee", "nerdin"]),
+        }),
+      ],
+      2,
+    );
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.text).toContain("failing sources: ciee, nerdin");
+    expect(alerts[0]?.text).not.toContain("gupy");
+  });
+
+  it("still reads cleanly when no run recorded which source failed", () => {
+    const alerts = evaluateCollectionHealth(
+      [run({ outcome: "failed" }), run({ outcome: "failed" })],
+      2,
+    );
+    expect(alerts[0]?.text).toBe("2 consecutive collection runs errored.");
+  });
+});
+
+describe("a deferred posting is named, not reported as unclassified", () => {
+  // `evaluateDeliveryOutcome` computes missingScores = filteredCount -
+  // scoredCount, and filteredCount deliberately includes what ADR-068's
+  // budget deferred. It only trusts the persisted breakdown when the two
+  // reconcile, so a healthy run that deferred anything reported
+  // "N postings were left without a score (unclassified=N)" — telling the
+  // operator there is something to investigate and giving it no name.
+  it("reports the budget by name when the breakdown reconciles", () => {
+    const alerts = evaluateDeliveryOutcome(
+      run({
+        kind: "scoreAndDeliver",
+        filteredCount: 25,
+        scoredCount: 20,
+        scoreFailureCounts: JSON.stringify({
+          deferred_international_budget: 5,
+        }),
+      }),
+      0.5,
+    );
+    const impact = alerts.find((a) => a.key === "scoring:impact");
+    expect(impact?.text).toContain("deferred_international_budget=5");
+    expect(impact?.text).not.toContain("unclassified");
+  });
+});
