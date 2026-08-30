@@ -16,7 +16,15 @@ function entryAt(firstSeenAt: Date): CorpusEntry {
     lastSeenAt: firstSeenAt,
     rawPayload: {},
   });
-  return { posting, requirements: [], matches: null, verdict: null };
+  return {
+    posting,
+    requirements: [],
+    matches: null,
+    verdict: null,
+    blockingFailure: null,
+    criticalGaps: [],
+    appliedAt: null,
+  };
 }
 
 describe("timeSeries", () => {

@@ -25,6 +25,11 @@ export interface StudyPlan {
  * no I/O, same discipline as `aggregateCorpus`/`gapAnalysis`/`timeSeries`
  * themselves. `MarketRepository.loadCorpus` is the only caller expected to
  * assemble `entries`; this function never touches the database.
+ *
+ * High-compatibility (verdict `review`/`apply`) is this caller's own
+ * definition of "in scope" for the gap analysis — `gapAnalysis` itself no
+ * longer picks a subset (ADR-076); it runs over exactly the entries it is
+ * given.
  */
 export function composeStudyPlan(
   entries: readonly CorpusEntry[],
@@ -33,10 +38,11 @@ export function composeStudyPlan(
   now: Date,
 ): StudyPlan {
   const aggregates = aggregateCorpus(entries, taxonomy);
-  const gaps = gapAnalysis(entries, profile, taxonomy);
-  const highCompatibilityCount = entries.filter(
+  const highCompatibility = entries.filter(
     (entry) => entry.verdict === "review" || entry.verdict === "apply",
-  ).length;
+  );
+  const gaps = gapAnalysis(highCompatibility, profile, taxonomy);
+  const highCompatibilityCount = highCompatibility.length;
 
   return {
     generatedAt: now,

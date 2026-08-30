@@ -218,6 +218,29 @@ export class McpController {
     );
 
     server.registerTool(
+      "get_personal_gap_analysis",
+      {
+        description:
+          "Skills missing from the profile, ranked by frequency, over a " +
+          "personal scope (ADR-076) — not the market-wide study plan. " +
+          "'applied': postings you actually applied to. 'discarded': " +
+          "postings discarded specifically for an unmet mandatory/blocking " +
+          "requirement, never ones discarded only for being off-track. " +
+          "Read-only, no LLM spend, never sends anything — this is for you " +
+          "to read and discuss, not a delivered report.",
+        inputSchema: {
+          scope: z.enum(["applied", "discarded"]),
+          track: z
+            .enum(["dev", "security", "automation", "data"])
+            .optional()
+            .describe("Narrow to postings resolving to this track."),
+        },
+      },
+      ({ scope, track }) =>
+        safely(() => this.market.personalGapAnalysis({ scope, track })),
+    );
+
+    server.registerTool(
       "list_postings",
       {
         description:

@@ -119,7 +119,7 @@ function textOf(result: Awaited<ReturnType<Client["callTool"]>>): unknown {
 }
 
 describe("MCP server", () => {
-  it("lists all fourteen tools", async () => {
+  it("lists all fifteen tools", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -127,6 +127,7 @@ describe("MCP server", () => {
         "cancel_run",
         "discard_posting",
         "get_health",
+        "get_personal_gap_analysis",
         "get_run",
         "get_study_plan",
         "list_application_events",
@@ -502,6 +503,79 @@ describe("MCP server", () => {
     });
   });
 
+  describe("get_personal_gap_analysis (ADR-076)", () => {
+    it("scopes to applied postings and reports how many were in scope", async () => {
+      const posting = seedPosting("1", "Estágio em Backend");
+      const repo = new PostingsRepository(db);
+      repo.markApplied(posting.fingerprint, new Date());
+      // A posting that is not applied must not count toward the scope.
+      seedPosting("2", "Estágio em Frontend");
+
+      const result = await client.callTool({
+        name: "get_personal_gap_analysis",
+        arguments: { scope: "applied" },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const body = textOf(result) as {
+        scope: string;
+        track: string | null;
+        scopedPostingCount: number;
+        gaps: unknown[];
+      };
+      expect(body.scope).toBe("applied");
+      expect(body.track).toBeNull();
+      expect(body.scopedPostingCount).toBe(1);
+      // No cached extraction/match data was seeded, so there is nothing to
+      // rank a gap from — an empty list, not an error.
+      expect(body.gaps).toEqual([]);
+    });
+
+    it("scopes to discarded postings, reporting zero when nothing was ever scored", async () => {
+      seedPosting("1", "Estágio em Backend");
+
+      const result = await client.callTool({
+        name: "get_personal_gap_analysis",
+        arguments: { scope: "discarded" },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const body = textOf(result) as { scopedPostingCount: number };
+      // Never scored (no cached matches) means verdict is null, which the
+      // "discarded" scope excludes — the pre-filter is not a competency
+      // judgement.
+      expect(body.scopedPostingCount).toBe(0);
+    });
+
+    // Distinct from the two tests above in what it actually pins: this
+    // reuses the exact same applied posting and only changes `scope`, so it
+    // catches the MCP layer silently ignoring/hardcoding the parameter
+    // rather than genuinely passing it through to executePersonalGapAnalysis
+    // — a bug the other two tests, each with a differently-shaped fixture,
+    // would not have caught.
+    it("does not count an applied posting toward the discarded scope", async () => {
+      const posting = seedPosting("1", "Estágio em Backend");
+      const repo = new PostingsRepository(db);
+      repo.markApplied(posting.fingerprint, new Date());
+
+      const result = await client.callTool({
+        name: "get_personal_gap_analysis",
+        arguments: { scope: "discarded" },
+      });
+
+      const body = textOf(result) as { scopedPostingCount: number };
+      expect(body.scopedPostingCount).toBe(0);
+    });
+
+    it("rejects a missing scope rather than defaulting to one", async () => {
+      const result = await client.callTool({
+        name: "get_personal_gap_analysis",
+        arguments: {},
+      });
+      expect(result.isError).toBe(true);
+    });
+  });
+
   describe("the feedback principal (ADR-075)", () => {
     async function feedbackClient(): Promise<Client> {
       const feedback = new Client({ name: "feedback", version: "1.0.0" });
@@ -570,6 +644,19 @@ describe("MCP server", () => {
       const repo = new ApplicationEventsRepository(db);
       const [row] = repo.findByFingerprint(posting.fingerprint);
       expect(row?.recordedBy).toMatch(/^feedback:/);
+    });
+
+    it("can call get_personal_gap_analysis (ADR-076)", async () => {
+      const feedback = await feedbackClient();
+      try {
+        const result = await feedback.callTool({
+          name: "get_personal_gap_analysis",
+          arguments: { scope: "applied" },
+        });
+        expect(result.isError).toBeFalsy();
+      } finally {
+        await feedback.close();
+      }
     });
   });
 });

@@ -60,16 +60,16 @@ Full detail: `docs/01-vision-and-scope.md`.
 
 ## 2. Non-goals — do not implement these, even when they look useful
 
-| Out of scope                         | Reason                                                           |
-| ------------------------------------ | ---------------------------------------------------------------- |
-| Automatic job application            | Ban risk; the bottleneck is finding the posting, not applying    |
-| Per-posting resume generation        | A project of its own, deferred to Phase 3                        |
-| Web interface                        | Telegram is the interface in v1                                  |
-| Junior / entry-level roles           | Reconsidered and kept out — see `docs/01`; revisit at period 4   |
-| **Generating** resume or letter text | Recommending which resume to use is in; writing prose is Phase 3 |
-| n8n as pipeline orchestrator         | Same error as a Hermes skill. ADR-008 places it correctly        |
-| Multi-user / SaaS                    | Personal product; auth and LGPD compliance with no upside        |
-| Scraping at scale                    | Not what this is for                                             |
+| Out of scope                         | Reason                                                                               |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| Automatic job application            | Ban risk; the bottleneck is finding the posting, not applying                        |
+| Per-posting resume generation        | Dropped from the roadmap, not deferred — ADR-076, docs/01                            |
+| Web interface                        | Telegram is the interface in v1                                                      |
+| Junior / entry-level roles           | Reconsidered and kept out — see `docs/01`; revisit at period 4                       |
+| **Generating** resume or letter text | Recommending which resume to use is in; writing prose was Phase 3, dropped (ADR-076) |
+| n8n as pipeline orchestrator         | Same error as a Hermes skill. ADR-008 places it correctly                            |
+| Multi-user / SaaS                    | Personal product; auth and LGPD compliance with no upside                            |
+| Scraping at scale                    | Not what this is for                                                                 |
 
 ## 3. Non-negotiable safety rule
 

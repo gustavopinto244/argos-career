@@ -80,6 +80,13 @@ import { loadTaxonomy } from "../market/infrastructure/taxonomy-loader";
 import { MarketRepository } from "../market/infrastructure/market-repository";
 import { composeStudyPlan } from "../market/domain/study-plan";
 import { renderStudyPlanText } from "../market/domain/render-study-plan";
+import { gapAnalysis } from "../market/domain/gap-analysis";
+import {
+  PersonalGapScope,
+  selectPersonalGapScope,
+} from "../market/domain/personal-gap-scope";
+import { GapAnalysisEntry } from "../market/domain/types";
+import { ProfileTrack } from "../profile/domain/profile";
 
 export interface CollectOutcome {
   readonly runId: string;
@@ -1701,6 +1708,74 @@ export async function executeStudyPlan(
     gapCount: plan.gaps.length,
     delivered: notifyResult.ok,
     ...(notifyResult.ok ? {} : { error: notifyResult.error.message }),
+  };
+}
+
+export interface PersonalGapAnalysisParams {
+  readonly scope: PersonalGapScope;
+  /** Narrows to postings resolving to this track (`resolveScoringTracks`,
+   * the same function `ApiScorer`/`executeListPostings` use) before
+   * computing gaps — never a filter on the resulting skill list itself.
+   * Omitted: every track. */
+  readonly track?: ProfileTrack | undefined;
+}
+
+export interface PersonalGapAnalysisOutcome {
+  readonly scope: PersonalGapScope;
+  readonly track: ProfileTrack | null;
+  readonly scopedPostingCount: number;
+  readonly gaps: readonly GapAnalysisEntry[];
+}
+
+/**
+ * ADR-076's personal gap analysis — "based on the postings I applied to
+ * (or was discarded from for a real competency gap), what skills am I
+ * missing." Read-only, no LLM spend, no delivery: unlike `executeStudyPlan`
+ * this never sends anything, it is meant for Hermes to read and discuss
+ * with the operator directly (`get_personal_gap_analysis`, `feedback`
+ * principal, ADR-076).
+ *
+ * Reuses every piece M10 already built: `MarketRepository.loadCorpus` for
+ * the corpus, `selectPersonalGapScope` for which postings count as "in
+ * scope" for the chosen `scope`, and `gapAnalysis` itself unchanged — the
+ * same function `composeStudyPlan` calls for the market-wide case, just
+ * fed a different, personally-scoped `entries` array.
+ */
+export function executePersonalGapAnalysis(
+  db: Db,
+  criteria: Criteria,
+  profile: Profile,
+  taxonomy: Taxonomy,
+  params: PersonalGapAnalysisParams,
+  now: () => Date = () => new Date(),
+  model: string = process.env.LLM_MODEL ?? "unknown",
+): PersonalGapAnalysisOutcome {
+  const profileHash = hashProfile(profile, now());
+  const entries = new MarketRepository(db, criteria).loadCorpus(
+    profileHash,
+    model,
+  );
+  const scoped = selectPersonalGapScope(entries, params.scope);
+  const trackFiltered =
+    params.track === undefined
+      ? scoped
+      : scoped.filter((entry) =>
+          resolveScoringTracks(
+            classifyTrack(
+              entry.posting.title,
+              criteria.tracks,
+              criteria.trackExclusions,
+            ),
+            entry.requirements,
+            criteria,
+          ).includes(params.track!),
+        );
+
+  return {
+    scope: params.scope,
+    track: params.track ?? null,
+    scopedPostingCount: trackFiltered.length,
+    gaps: gapAnalysis(trackFiltered, profile, taxonomy),
   };
 }
 
