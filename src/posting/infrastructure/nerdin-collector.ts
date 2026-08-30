@@ -4,6 +4,7 @@ import {
   CollectorPort,
 } from "../domain/ports/collector.port";
 import { RawPosting } from "../domain/raw-posting";
+import { FetchedBody, fetchWithDeadline } from "./fetch-with-deadline";
 import { NerdinJobSchema } from "./nerdin-schema";
 import { parseNerdinListing } from "./nerdin-listing-parser";
 
@@ -190,16 +191,14 @@ export class NerdinCollector implements CollectorPort {
 
       let listingHtml: string;
       try {
-        const response = await this.fetchWithBackoff(
-          buildListingUrl(criteria, page),
-        );
+        const response = await this.fetchPage(buildListingUrl(criteria, page));
         if (!response.ok) {
           listingError = {
             message: `NerdIn listing responded ${response.status}`,
           };
           break;
         }
-        listingHtml = await response.text();
+        listingHtml = response.body;
       } catch (cause) {
         listingError = { message: "NerdIn listing request failed", cause };
         break;
@@ -260,12 +259,12 @@ export class NerdinCollector implements CollectorPort {
         // failing is a per-item loss (principle 1), not a whole-collection
         // failure. A loop-wide try/catch here is the exact bug ADR-063
         // records catching in its own tests.
-        const response = await this.fetchWithBackoff(detailUrl);
+        const response = await this.fetchPage(detailUrl);
         if (!response.ok) {
           schemaRejectedCount += 1;
           continue;
         }
-        const jsonLd = extractJobPostingJsonLd(await response.text());
+        const jsonLd = extractJobPostingJsonLd(response.body);
         if (!jsonLd || typeof jsonLd !== "object") {
           schemaRejectedCount += 1;
           continue;
@@ -315,29 +314,16 @@ export class NerdinCollector implements CollectorPort {
    * 4xx means the request itself is wrong, and retrying it wastes the
    * source's time for no different outcome (CLAUDE.md §6).
    */
-  private async fetchWithBackoff(url: string): Promise<Response> {
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= this.backoffDelaysMs.length; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      try {
-        const response = await this.fetchImpl(url, {
-          headers: { "User-Agent": USER_AGENT },
-          signal: controller.signal,
-        });
-        if (response.ok || response.status < 500) return response;
-        lastError = new Error(`NerdIn responded ${response.status}`);
-      } catch (error) {
-        lastError = error;
-      } finally {
-        clearTimeout(timer);
-      }
-
-      const delay = this.backoffDelaysMs[attempt];
-      if (delay !== undefined) await sleep(delay);
-    }
-
-    throw lastError;
+  /** Delegates to the shared `fetchWithDeadline` (`fetch-with-deadline.ts`),
+   * which holds the timeout across the body read and bounds its size. This
+   * collector used to carry its own copy that did neither. */
+  private fetchPage(url: string): Promise<FetchedBody> {
+    return fetchWithDeadline(url, {
+      fetchImpl: this.fetchImpl,
+      timeoutMs: this.timeoutMs,
+      backoffDelaysMs: this.backoffDelaysMs,
+      userAgent: USER_AGENT,
+      source: "NerdIn",
+    });
   }
 }

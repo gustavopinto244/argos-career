@@ -84,6 +84,7 @@ revisited on its merits instead of re-argued from memory.
 | [071](adr/071-nerdin-collector.md)                                            | Add NerdIn as a source; reject RemotIn and Programathor                             | Accepted   | 2026-08-27 |
 | [072](adr/072-manual-applied-tracking.md)                                     | A manual, reversible "applied" bookmark, not the Phase 2 feedback loop              | Accepted   | 2026-08-28 |
 | [073](adr/073-re-collection-must-not-blank-stored-facts.md)                   | Coalesce on re-collection: a source's null never overwrites a stored fact           | Accepted   | 2026-08-29 |
+| [074](adr/074-one-bounded-fetch-for-every-collector.md)                       | One bounded fetch for every collector: the deadline covers the body                 | Accepted   | 2026-08-30 |
 
 ## When an ADR is required
 

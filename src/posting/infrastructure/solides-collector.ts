@@ -4,6 +4,7 @@ import {
   CollectorPort,
 } from "../domain/ports/collector.port";
 import { RawPosting } from "../domain/raw-posting";
+import { FetchedBody, fetchWithDeadline } from "./fetch-with-deadline";
 import {
   SolidesJobSchema,
   SolidesResponseEnvelopeSchema,
@@ -144,7 +145,7 @@ export class SolidesCollector implements CollectorPort {
         if (page > 1) await sleep(this.requestIntervalMs);
 
         const url = buildUrl(criteria, page);
-        const response = await this.fetchWithBackoff(url);
+        const response = await this.fetchPage(url);
 
         if (!response.ok) {
           return {
@@ -161,7 +162,7 @@ export class SolidesCollector implements CollectorPort {
 
         let body: unknown;
         try {
-          body = await response.json();
+          body = JSON.parse(response.body) as unknown;
         } catch (cause) {
           return {
             source: SOURCE,
@@ -224,7 +225,7 @@ export class SolidesCollector implements CollectorPort {
         page += 1;
       }
     } catch (cause) {
-      // Reached once fetchWithBackoff exhausts every attempt (a persistent
+      // Reached once fetchPage exhausts every attempt (a persistent
       // 5xx or network failure) — the underlying message is folded in so a
       // final "responded 500" or "fetch failed" isn't reduced to a generic
       // "request failed" with the detail buried only in `cause`.
@@ -255,29 +256,16 @@ export class SolidesCollector implements CollectorPort {
    * means the request itself is wrong, and retrying it wastes the source's
    * time for no different outcome (collector etiquette, CLAUDE.md §6).
    */
-  private async fetchWithBackoff(url: string): Promise<Response> {
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= this.backoffDelaysMs.length; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      try {
-        const response = await this.fetchImpl(url, {
-          headers: { "User-Agent": USER_AGENT },
-          signal: controller.signal,
-        });
-        if (response.ok || response.status < 500) return response;
-        lastError = new Error(`Sólides responded ${response.status}`);
-      } catch (error) {
-        lastError = error;
-      } finally {
-        clearTimeout(timer);
-      }
-
-      const delay = this.backoffDelaysMs[attempt];
-      if (delay !== undefined) await sleep(delay);
-    }
-
-    throw lastError;
+  /** Delegates to the shared `fetchWithDeadline` (`fetch-with-deadline.ts`),
+   * which holds the timeout across the body read and bounds its size. This
+   * collector used to carry its own copy that did neither. */
+  private fetchPage(url: string): Promise<FetchedBody> {
+    return fetchWithDeadline(url, {
+      fetchImpl: this.fetchImpl,
+      timeoutMs: this.timeoutMs,
+      backoffDelaysMs: this.backoffDelaysMs,
+      userAgent: USER_AGENT,
+      source: "Sólides",
+    });
   }
 }
