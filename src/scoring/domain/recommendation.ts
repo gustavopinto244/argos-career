@@ -1,4 +1,4 @@
-import { normalize } from "../../posting/domain/fingerprint";
+import { keywordMatchesText } from "../../prefilter/domain/title-match";
 import { deriveProfileKeywords } from "../../profile/domain/profile-keywords";
 import { Profile } from "../../profile/domain/profile";
 import {
@@ -106,14 +106,23 @@ function computeMissingTerms(
   matches: readonly Match[],
   profile: Profile,
 ): string[] {
-  const normalizedKeywords = deriveProfileKeywords(profile).map(normalize);
+  // Whole-word via `keywordMatchesText`, not `normalizedText.includes(...)`.
+  // `normalize` strips punctuation, so an alias like `C#`, `C++` or `.NET`
+  // collapses to one or two letters and then matches as a substring almost
+  // everywhere: measured against the shipped example profile, the `TS` alias
+  // becomes "ts" and matches "scripts". Every requirement containing such a
+  // fragment counted as "already named in the profile", so `missingTerms`
+  // silently returned fewer terms — trending to `[]` as aliases get shorter.
+  //
+  // This is the same failure ADR-011 Amendment 2 fixed in the pre-filter,
+  // and it is fixed the same way, with the same function.
+  const keywords = deriveProfileKeywords(profile);
   const missing: string[] = [];
 
   for (const match of matches) {
     if (match.status === "not_met") continue;
-    const normalizedText = normalize(match.requirement.text);
-    const alreadyNamed = normalizedKeywords.some((keyword) =>
-      normalizedText.includes(keyword),
+    const alreadyNamed = keywords.some((keyword) =>
+      keywordMatchesText(match.requirement.text, keyword),
     );
     if (!alreadyNamed) missing.push(match.requirement.text);
   }

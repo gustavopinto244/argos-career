@@ -310,3 +310,48 @@ describe("computeRecommendation — evidence quoted with the prompt's tag", () =
     ]);
   });
 });
+
+describe("computeRecommendation — missingTerms matches whole words", () => {
+  // `normalize` strips punctuation, so an alias like `C#`, `C++`, `.NET` or
+  // `TS` collapses to one or two letters — and the old substring check then
+  // matched it almost everywhere. Measured against the shipped example
+  // profile, the `TS` alias becomes "ts" and matches "scripts", so every
+  // requirement containing such a fragment counted as "already named in the
+  // profile" and missingTerms silently returned fewer terms, trending to []
+  // as aliases get shorter. Same failure ADR-011 Amendment 2 fixed in the
+  // pre-filter, fixed here with the same function.
+  function shortAliasProfile(): Profile {
+    const base = profile();
+    const [first, ...rest] = base.competencies;
+    return {
+      ...base,
+      competencies: [{ ...first!, aliases: ["TS", "C#"] }, ...rest],
+    };
+  }
+
+  it("does not treat a short alias as present just because it is a substring", () => {
+    const matches: Match[] = [
+      createMatch(
+        requirement({ text: "Escrever scripts de automação" }),
+        "met",
+        "Built atlas-manager's HTTP layer in Node.js.",
+      ),
+    ];
+    expect(
+      computeRecommendation(matches, shortAliasProfile()).missingTerms,
+    ).toEqual(["Escrever scripts de automação"]);
+  });
+
+  it("still counts the alias when it is genuinely its own word", () => {
+    const matches: Match[] = [
+      createMatch(
+        requirement({ text: "Experiência com TS" }),
+        "met",
+        "Built atlas-manager's HTTP layer in Node.js.",
+      ),
+    ];
+    expect(
+      computeRecommendation(matches, shortAliasProfile()).missingTerms,
+    ).toEqual([]);
+  });
+});

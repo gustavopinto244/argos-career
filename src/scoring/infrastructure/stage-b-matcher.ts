@@ -220,12 +220,16 @@ export class StageBMatcher {
       requirements,
     );
 
-    const askOne = async (
+    /** Whether this requirement is answered from the partial cache and so
+     * costs no model call — the predicate `askOne` short-circuits on, named
+     * because the warming logic below has to ask the same question before
+     * deciding which requirement to warm with. */
+    const servedFromPartial = (
       requirement: Requirement,
       requirementIndex: number,
-    ): Promise<Answer> => {
+    ): boolean => {
       const saved = partial[requirementIndex];
-      if (
+      return Boolean(
         saved &&
         (saved.evidence === null ||
           (isKnownProfileEvidence(saved.evidence, profile, evaluatedAt) &&
@@ -234,8 +238,16 @@ export class StageBMatcher {
               requirement,
               profile,
               evaluatedAt,
-            )))
-      ) {
+            ))),
+      );
+    };
+
+    const askOne = async (
+      requirement: Requirement,
+      requirementIndex: number,
+    ): Promise<Answer> => {
+      const saved = partial[requirementIndex];
+      if (saved && servedFromPartial(requirement, requirementIndex)) {
         return { ok: true, match: saved, evidenceRejected: false };
       }
       // Same disk read, same contract, as stage A — see `StageAExtractor`.
@@ -308,14 +320,45 @@ export class StageBMatcher {
     };
 
     const answers: (Answer | undefined)[] = [];
-    const [first, ...rest] = requirements;
 
     // The warming call (see the class docblock): one cold prefix, paid once,
     // so the concurrent calls behind it hit the provider's cache instead of
     // all racing the same miss.
-    if (first) answers.push(await askOne(first, 0));
-    if (answers[0]?.ok) {
-      answers.push(...(await runBounded(rest, this.concurrency, askOne, 1)));
+    //
+    // It has to be the first requirement that *actually reaches the model*,
+    // not index 0 unconditionally. On a run resumed after a mid-batch
+    // failure — precisely when a partial cache exists — index 0 is typically
+    // served from `partial` and returns without calling anything, so the
+    // remaining N−1 launched straight into a still-cold prefix: the exact
+    // stampede this design exists to prevent, in the one case it was most
+    // likely to happen.
+    let warmIndex = 0;
+    while (
+      warmIndex < requirements.length &&
+      servedFromPartial(requirements[warmIndex]!, warmIndex)
+    ) {
+      warmIndex++;
+    }
+
+    // Everything before the warming index is a cache hit, so awaiting them in
+    // order costs nothing and keeps `answers` index-aligned with
+    // `requirements`.
+    for (let i = 0; i < warmIndex; i++) {
+      answers.push(await askOne(requirements[i]!, i));
+    }
+
+    const warming = requirements[warmIndex];
+    if (warming) answers.push(await askOne(warming, warmIndex));
+
+    if (answers.every((answer) => answer?.ok)) {
+      answers.push(
+        ...(await runBounded(
+          requirements.slice(warmIndex + 1),
+          this.concurrency,
+          askOne,
+          warmIndex + 1,
+        )),
+      );
     }
 
     const matches: Match[] = [];

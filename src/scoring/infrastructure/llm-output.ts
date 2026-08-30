@@ -74,15 +74,45 @@ export function normalizeModelOutput(raw: string): string {
 
   const firstBrace = withoutFences.indexOf("{");
   const firstBracket = withoutFences.indexOf("[");
-  const candidates = [firstBrace, firstBracket].filter((i) => i >= 0);
-  if (candidates.length === 0) return withoutFences;
+  const starts = [firstBrace, firstBracket].filter((i) => i >= 0);
+  if (starts.length === 0) return withoutFences;
 
-  const start = Math.min(...candidates);
-  const closeChar = withoutFences[start] === "{" ? "}" : "]";
-  const end = withoutFences.lastIndexOf(closeChar);
-  if (end === -1 || end < start) return withoutFences;
+  const sliceFrom = (start: number): string | null => {
+    const closeChar = withoutFences[start] === "{" ? "}" : "]";
+    const end = withoutFences.lastIndexOf(closeChar);
+    if (end === -1 || end < start) return null;
+    return withoutFences.slice(start, end + 1);
+  };
 
-  return withoutFences.slice(start, end + 1);
+  // Both candidate starts are tried, preferring one that actually parses,
+  // rather than committing to whichever delimiter appears first.
+  //
+  // Taking the earliest position unconditionally broke on unfenced JSON
+  // preceded by prose containing a bracket — a real Stage A shape:
+  // `Analisando os requisitos [ver lista], segue o JSON:\n{"requirements":…}`
+  // sliced from the `[`, producing text that could never parse. Each
+  // occurrence then burned the whole 3-attempt repair budget and landed the
+  // posting in the review section as `invalid_output`.
+  //
+  // Ordering still matters when both parse: the earliest start wins, so a
+  // genuine array-at-top-level response is unaffected.
+  const ordered = [...starts].sort((a, b) => a - b);
+  const slices = ordered
+    .map(sliceFrom)
+    .filter((slice): slice is string => slice !== null);
+
+  for (const slice of slices) {
+    try {
+      JSON.parse(slice);
+      return slice;
+    } catch {
+      // Try the other delimiter before giving up.
+    }
+  }
+
+  // Nothing parsed: keep the previous behaviour and let `JSON.parse` fail
+  // naturally downstream, where the failure is classified and retried.
+  return slices[0] ?? withoutFences;
 }
 
 function describeIssues(error: z.ZodError): string {

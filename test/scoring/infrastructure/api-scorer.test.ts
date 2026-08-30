@@ -371,3 +371,44 @@ describe("resolveScoringTracks (ADR-059)", () => {
     ).toEqual([]);
   });
 });
+
+describe("ApiScorer.score honours 'it never rejects'", () => {
+  // `ScorerPort` documents failure as a value, and `executeDeliver` treats a
+  // throw from the scorer as a whole-run abort: the run is marked failed,
+  // claims are released, and NO digest goes out. But this method also does
+  // synchronous better-sqlite3 writes, which throw on SQLITE_BUSY or a full
+  // disk — and the nightly backup runs VACUUM INTO against the same file.
+  // One busy write on one posting used to cost the entire batch.
+  it("returns a failure value when a repository write throws", async () => {
+    const ask = vi
+      .fn()
+      .mockResolvedValueOnce(extractionResponse())
+      .mockResolvedValueOnce(
+        '{"status":"met","evidence":"Built a Node.js service."}',
+      );
+    const scorer = buildScorer(ask);
+    vi.spyOn(postingsRepo, "updateExtractedFields").mockImplementation(() => {
+      throw new Error("database is locked");
+    });
+
+    const result = await scorer.score(posting(), "profile-hash");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("matching_failed");
+      expect(result.diagnostic.kind).toBe("permanent_error");
+    }
+  });
+
+  it("does not rethrow a non-Error throw either", async () => {
+    const ask = vi.fn().mockResolvedValueOnce(extractionResponse());
+    const scorer = buildScorer(ask);
+    vi.spyOn(postingsRepo, "updateExtractedFields").mockImplementation(() => {
+      throw "disk I/O error";
+    });
+
+    await expect(
+      scorer.score(posting(), "profile-hash"),
+    ).resolves.toMatchObject({ ok: false });
+  });
+});

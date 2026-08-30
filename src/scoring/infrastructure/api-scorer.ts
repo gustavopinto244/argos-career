@@ -72,10 +72,53 @@ export class ApiScorer implements ScorerPort {
     private readonly postingsRepo: PostingsRepository,
   ) {}
 
+  /**
+   * Honours `ScorerPort`'s "it never rejects" contract for real, not just in
+   * the paths that already return a failure value.
+   *
+   * Stages A and B convert their own LLM failures into results, but this
+   * method also does synchronous better-sqlite3 writes —
+   * `postingsRepo.updateExtractedFields` here, `matchesRepo.upsertPartial`
+   * and `upsert` inside `StageBMatcher` — and those *throw* on `SQLITE_BUSY`
+   * or a full disk. Nothing caught them, and `executeDeliver` treats a throw
+   * from the scorer as a whole-run abort: the run row is marked `failed`,
+   * claims are released, the error re-raised, and **no digest goes out at
+   * all**. One busy write, on one posting, cost the entire nightly batch.
+   *
+   * That is not hypothetical contention: the nightly backup runs
+   * `VACUUM INTO` against this same database file.
+   *
+   * A caught throw becomes `matching_failed` — the same shape a Stage B
+   * failure already produces, so the posting lands in the review section
+   * with `lowConfidence` (ADR-006) and every other posting in the batch
+   * still gets scored and delivered.
+   */
   async score(
     posting: Posting,
     profileHash: string,
     evaluatedAt: Date = new Date(),
+  ): Promise<ScoreResult> {
+    try {
+      return await this.scoreOrThrow(posting, profileHash, evaluatedAt);
+    } catch (cause) {
+      return {
+        ok: false,
+        reason: "matching_failed",
+        attempts: 1,
+        permanent: true,
+        diagnostic: {
+          stage: "stage-b",
+          kind: "permanent_error",
+          errorType: cause instanceof Error ? cause.name : typeof cause,
+        },
+      };
+    }
+  }
+
+  private async scoreOrThrow(
+    posting: Posting,
+    profileHash: string,
+    evaluatedAt: Date,
   ): Promise<ScoreResult> {
     const titleTracks = classifyTrack(
       posting.title,

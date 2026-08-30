@@ -313,3 +313,95 @@ describe("MatchesRepository", () => {
     });
   });
 });
+
+describe("publishing the complete cache retires its resume checkpoints", () => {
+  // partial_matches exist only so a failed run can resume. Once every
+  // position is present in `matches`, findPartial is unreachable for that
+  // key (it is consulted only after find() misses) — so the rows are dead
+  // weight that accumulated forever: ~25 per scored posting, with a new
+  // profileHash/promptVersion/model/requirementsHash starting a fresh
+  // generation without retiring the old one. Measured on production before
+  // this fix: 571 of 585 partial rows (98%) were already superseded, and
+  // every nightly VACUUM INTO backup copied all of them.
+  const requirements = [
+    {
+      text: "Node.js experience",
+      category: "language" as const,
+      weight: "mandatory" as const,
+    },
+  ];
+
+  function countPartial(): number {
+    return (
+      db.get<{ n: number }>(sql`SELECT COUNT(*) as n FROM partial_matches`)
+        ?.n ?? 0
+    );
+  }
+
+  it("deletes the partial rows for the key it just published", () => {
+    repository.upsertPartial(
+      "fp",
+      "ph",
+      "v1",
+      MODEL_A,
+      REQ_HASH_A,
+      0,
+      matchList()[0]!,
+      new Date(),
+    );
+    expect(countPartial()).toBe(1);
+
+    repository.upsert(
+      "fp",
+      "ph",
+      "v1",
+      MODEL_A,
+      REQ_HASH_A,
+      matchList(),
+      new Date(),
+    );
+
+    expect(countPartial()).toBe(0);
+    expect(
+      repository.find("fp", "ph", "v1", MODEL_A, REQ_HASH_A),
+    ).not.toBeNull();
+  });
+
+  it("leaves another key's checkpoints alone", () => {
+    const now = new Date();
+    repository.upsertPartial(
+      "fp",
+      "ph",
+      "v1",
+      MODEL_A,
+      REQ_HASH_A,
+      0,
+      matchList()[0]!,
+      now,
+    );
+    repository.upsertPartial(
+      "fp",
+      "ph",
+      "v1",
+      MODEL_B,
+      REQ_HASH_B,
+      0,
+      matchList()[0]!,
+      now,
+    );
+
+    repository.upsert("fp", "ph", "v1", MODEL_A, REQ_HASH_A, matchList(), now);
+
+    expect(countPartial()).toBe(1);
+    expect(
+      repository.findPartial(
+        "fp",
+        "ph",
+        "v1",
+        MODEL_B,
+        REQ_HASH_B,
+        requirements,
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+});

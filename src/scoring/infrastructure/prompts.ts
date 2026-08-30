@@ -69,12 +69,26 @@ export function verifyPromptTemplates(
   return null;
 }
 
+/**
+ * The replacement is passed as a **function**, not a string, so `$` in the
+ * value is literal.
+ *
+ * With a string replacement, `String.replaceAll` interprets `$&`, `` $` ``,
+ * `$'` and `$1` in the *replacement* as substitution patterns — and the
+ * values here are `POSTING_TITLE`/`POSTING_DESCRIPTION` (raw text from the
+ * source) and `REQUIREMENT_TEXT` (model output derived from it). A posting
+ * containing `$'` spliced the rest of the template back in after the
+ * placeholder, duplicating or re-ordering the prompt's own instruction
+ * block; `$&` re-inserted the `{{PLACEHOLDER}}` literal, leaving an
+ * unsubstituted token in the rendered prompt. Neither is something posting
+ * text should be able to do.
+ */
 function substitute(
   template: string,
   values: Readonly<Record<string, string>>,
 ): string {
   return Object.entries(values).reduce(
-    (result, [key, value]) => result.replaceAll(`{{${key}}}`, value),
+    (result, [key, value]) => result.replaceAll(`{{${key}}}`, () => value),
     template,
   );
 }

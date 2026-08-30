@@ -92,3 +92,40 @@ describe("htmlToText (docs/audit AC-017)", () => {
     expect(htmlToText("")).toEqual({ text: "", hadMarkup: false });
   });
 });
+
+describe("entity decoding does not resolve through Object.prototype", () => {
+  // `ENTITY_PATTERN` matches [a-zA-Z]+, which includes every prototype member
+  // name, and the lookup used to be a plain object literal — so a posting
+  // containing `&constructor;` had `function Object() { [native code] }`
+  // spliced into its description, and from there into the Stage A prompt and
+  // the contentHash that keys the extraction cache.
+  it.each([
+    "constructor",
+    "toString",
+    "valueOf",
+    "hasOwnProperty",
+    "__proto__",
+  ])(
+    "leaves &%s; untouched instead of injecting a prototype member",
+    (name) => {
+      const input = `Vaga &${name}; devs`;
+      expect(htmlToText(input).text).toBe(input);
+    },
+  );
+
+  it("still decodes the entities it actually knows", () => {
+    expect(htmlToText("A &amp; B").text).toBe("A & B");
+    expect(htmlToText("&lt;tag&gt;").text).toBe("<tag>");
+    expect(htmlToText("a&nbsp;b").text).toBe("a b");
+    expect(htmlToText("Caf&#233;").text).toBe("Café");
+  });
+
+  it("refuses to decode &#0; into a real null byte", () => {
+    // `hashExtractionInput` uses \0 as its field separator and documents it
+    // as "never legitimately present in posting text" — decoding this made
+    // that invariant false.
+    const decoded = htmlToText("Nulo &#0; aqui").text;
+    expect(decoded).not.toContain("\0");
+    expect(decoded).toBe("Nulo � aqui");
+  });
+});

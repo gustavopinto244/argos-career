@@ -719,12 +719,28 @@ export class OpenRouterClient {
     }
   }
 
+  /**
+   * `timeoutMs` here is the **remaining** budget for the attempt, not a fresh
+   * copy of the full one.
+   *
+   * The fetch timer is cleared in its own `finally` before this runs, so
+   * passing the whole `timeoutMs` again applied the deadline twice: one
+   * Stage A attempt could run 240 s against a documented 120 s timeout, and
+   * with `DEFAULT_MAX_TRANSPORT_ATTEMPTS = 4` a single posting could consume
+   * ~16 minutes of the nightly window — while the code claimed an "explicit
+   * timeout" per attempt.
+   */
   private async readBodyWithDeadline(
     response: Response,
     controller: AbortController,
-    timeoutMs: number,
+    remainingMs: number,
   ): Promise<string> {
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // Never zero or negative: a budget already spent still needs a tick for
+    // the abort to be delivered rather than throwing synchronously here.
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.max(1, remainingMs),
+    );
     try {
       return await this.readBody(response, controller.signal);
     } finally {
@@ -833,7 +849,7 @@ export class OpenRouterClient {
       const body = await this.readBodyWithDeadline(
         response,
         controller,
-        timeoutMs,
+        timeoutMs - (Date.now() - startedAt),
       ).catch(() => "");
       let errorJson: unknown;
       try {
@@ -874,7 +890,7 @@ export class OpenRouterClient {
       bodyText = await this.readBodyWithDeadline(
         response,
         controller,
-        timeoutMs,
+        timeoutMs - (Date.now() - startedAt),
       );
       json = JSON.parse(bodyText);
     } catch (cause) {
