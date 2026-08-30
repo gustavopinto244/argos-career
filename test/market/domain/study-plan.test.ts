@@ -39,6 +39,7 @@ function entry(
     verdict,
     blockingFailure: null,
     criticalGaps: [],
+    periodGate: null,
     appliedAt: null,
   };
 }

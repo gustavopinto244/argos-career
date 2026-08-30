@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `application_events_fact_identity_unique` ON `application_events` (`fingerprint`,`kind`,`occurred_at`);

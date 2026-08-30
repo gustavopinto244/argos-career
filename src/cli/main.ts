@@ -84,6 +84,7 @@ import { gapAnalysis } from "../market/domain/gap-analysis";
 import {
   PersonalGapScope,
   selectPersonalGapScope,
+  unanalyzedAppliedEntries,
 } from "../market/domain/personal-gap-scope";
 import { GapAnalysisEntry } from "../market/domain/types";
 import { ProfileTrack } from "../profile/domain/profile";
@@ -1724,6 +1725,11 @@ export interface PersonalGapAnalysisOutcome {
   readonly scope: PersonalGapScope;
   readonly track: ProfileTrack | null;
   readonly scopedPostingCount: number;
+  /** Applied postings excluded from the analysis because Stage A/B never
+   * produced a usable result for them — `scope: "applied"` only. Reported
+   * so a smaller-than-expected `scopedPostingCount` is explainable rather
+   * than looking like postings went missing. */
+  readonly unanalyzedPostingCount: number;
   readonly gaps: readonly GapAnalysisEntry[];
 }
 
@@ -1751,9 +1757,15 @@ export function executePersonalGapAnalysis(
   model: string = process.env.LLM_MODEL ?? "unknown",
 ): PersonalGapAnalysisOutcome {
   const profileHash = hashProfile(profile, now());
+  // The academic context is what lets Stage C mark a posting blocked only
+  // by a not-yet-reached period (ADR-053) — without it `periodGate` is
+  // null everywhere and the "discarded" scope cannot tell "I lack a skill"
+  // from "I am in period 2 and they want period 4". Purely additive:
+  // `periodGate` is computed after score/verdict and feeds neither.
   const entries = new MarketRepository(db, criteria).loadCorpus(
     profileHash,
     model,
+    { courseStart: profile.courseStart, today: now() },
   );
   const scoped = selectPersonalGapScope(entries, params.scope);
   const trackFiltered =
@@ -1775,6 +1787,8 @@ export function executePersonalGapAnalysis(
     scope: params.scope,
     track: params.track ?? null,
     scopedPostingCount: trackFiltered.length,
+    unanalyzedPostingCount:
+      params.scope === "applied" ? unanalyzedAppliedEntries(entries).length : 0,
     gaps: gapAnalysis(trackFiltered, profile, taxonomy),
   };
 }

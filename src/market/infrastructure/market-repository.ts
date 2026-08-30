@@ -56,7 +56,20 @@ export class MarketRepository {
    * cached for any of them, the same honest "not scored yet" a fresh
    * posting shows, rather than silently mixing two models' judgments.
    */
-  loadCorpus(profileHash: string, model: string): CorpusEntry[] {
+  loadCorpus(
+    profileHash: string,
+    model: string,
+    /**
+     * Same optional shape `computeScore` itself takes. Supplied, Stage C
+     * can tell a posting blocked *only* by a not-yet-reached academic
+     * period from a real rejection (ADR-053) and fills `periodGate`;
+     * omitted, `periodGate` is null everywhere and nothing else changes —
+     * `periodGate` is computed after `score` and `verdict` are final and
+     * feeds neither, so passing this can never move a market-analysis
+     * number.
+     */
+    academicContext?: { readonly courseStart: Date; readonly today: Date },
+  ): CorpusEntry[] {
     const postingsRepo = new PostingsRepository(this.db);
     const postings = postingsRepo.findActive();
     const appliedAtByFingerprint = postingsRepo.findAppliedAtMap();
@@ -96,6 +109,7 @@ export class MarketRepository {
               this.criteria.trackExclusions,
             ),
             scoringConfig,
+            academicContext,
           )
         : null;
 
@@ -109,6 +123,7 @@ export class MarketRepository {
         // consumer that needs these instead of discarding them.
         blockingFailure: outcome?.blockingFailure ?? null,
         criticalGaps: outcome?.criticalGaps ?? [],
+        periodGate: outcome?.periodGate ?? null,
         appliedAt: appliedAtByFingerprint.get(posting.fingerprint) ?? null,
       };
     });

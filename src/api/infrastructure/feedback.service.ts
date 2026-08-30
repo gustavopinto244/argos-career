@@ -50,7 +50,11 @@ export class FeedbackService {
   record(
     input: RecordApplicationEventInput,
     recordedBy: string,
-  ): { readonly fingerprint: string; readonly kind: ApplicationEventKind } {
+  ): {
+    readonly fingerprint: string;
+    readonly kind: ApplicationEventKind;
+    readonly recorded: boolean;
+  } {
     const postingsRepo = new PostingsRepository(this.db);
     if (!postingsRepo.findByFingerprint(input.fingerprint)) {
       throw new NotFoundException(
@@ -81,8 +85,11 @@ export class FeedbackService {
       );
     }
 
-    new ApplicationEventsRepository(this.db).record(event);
-    return { fingerprint: event.fingerprint, kind: event.kind };
+    const recorded = new ApplicationEventsRepository(this.db).record(event);
+    // `recorded: false` means this exact fact was already known — reporting
+    // it as a fresh record would let a caller (or the Hermes skill) claim
+    // it found something new when it re-read the same email.
+    return { fingerprint: event.fingerprint, kind: event.kind, recorded };
   }
 
   /** A posting's full application-event history, most recent first. Reads
