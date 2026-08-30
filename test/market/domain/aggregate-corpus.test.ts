@@ -50,6 +50,9 @@ function entry(
     requirements: overrides.requirements ?? [],
     matches: null,
     verdict: null,
+    blockingFailure: null,
+    criticalGaps: [],
+    appliedAt: null,
   };
 }
 

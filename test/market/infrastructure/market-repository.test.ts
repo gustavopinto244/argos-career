@@ -123,6 +123,10 @@ function metMatch(text: string): Match {
   return createMatch(requirement(text), "met", "Evidence.");
 }
 
+function notMetMatch(text: string): Match {
+  return createMatch(requirement(text), "not_met", null);
+}
+
 let dir: string;
 let db: ReturnType<typeof createDatabase>;
 let postingsRepo: PostingsRepository;
@@ -289,6 +293,51 @@ describe("MarketRepository.loadCorpus", () => {
     const [entry] = repository.loadCorpus(PROFILE_HASH, MODEL);
     expect(entry?.matches).toBeNull();
     expect(entry?.verdict).toBeNull();
+  });
+
+  // ADR-076: loadCorpus used to compute the full ScoreOutcome and keep
+  // only verdict — personal gap analysis needs the rest.
+  it("carries criticalGaps from the same computeScore call verdict already came from", () => {
+    const p = posting("1");
+    postingsRepo.upsert(p);
+    const requirements = [requirement("Kubernetes")];
+    extractionsRepo.upsert(
+      p.fingerprint,
+      STAGE_A_PROMPT_VERSION,
+      MODEL,
+      contentHashFor(p),
+      { requirements, seniority: null, experienceYears: null },
+      NOW,
+    );
+    matchesRepo.upsert(
+      p.fingerprint,
+      PROFILE_HASH,
+      STAGE_B_PROMPT_VERSION,
+      MODEL,
+      hashRequirements(requirements),
+      [notMetMatch("Kubernetes")],
+      NOW,
+    );
+
+    const [entry] = repository.loadCorpus(PROFILE_HASH, MODEL);
+    expect(entry?.verdict).toBe("discard");
+    expect(entry?.criticalGaps).toEqual([requirement("Kubernetes")]);
+  });
+
+  it("attaches appliedAt from PostingsRepository.markApplied", () => {
+    const p = posting("1");
+    postingsRepo.upsert(p);
+    postingsRepo.markApplied(p.fingerprint, NOW);
+
+    const [entry] = repository.loadCorpus(PROFILE_HASH, MODEL);
+    expect(entry?.appliedAt).toEqual(NOW);
+  });
+
+  it("leaves appliedAt null for a posting never marked applied", () => {
+    postingsRepo.upsert(posting("1"));
+
+    const [entry] = repository.loadCorpus(PROFILE_HASH, MODEL);
+    expect(entry?.appliedAt).toBeNull();
   });
 
   it("ignores matches cached under a different model (docs/audit PR-017)", () => {

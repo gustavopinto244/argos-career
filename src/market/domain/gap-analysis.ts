@@ -20,16 +20,20 @@ function profileSkills(profile: Profile, taxonomy: Taxonomy): Set<string> {
 }
 
 /**
- * "Skills frequent in high-compatibility postings and weak or absent in the
- * profile, ranked by frequency" (docs/10-milestones.md). High-compatibility
- * means verdict `review` or `apply` — `discard` is excluded, reusing the
- * verdict tiers `04-scoring-model.md` already defines rather than inventing
- * a separate cutoff. A posting with no verdict (Stage A/B never ran) cannot
- * be judged high-compatibility and is excluded, not assumed either way.
+ * "Skills frequent in `entries` and weak or absent in the profile, ranked by
+ * frequency" (docs/10-milestones.md).
  *
- * Pure, no I/O — `verdict` is precomputed by the caller (`MarketRepository`,
- * the same way `ApiScorer` calls Stage C) so this stays a plain reduction
- * over already-known facts, same discipline as `aggregateCorpus`.
+ * Deliberately takes `entries` as already scoped — this function used to
+ * filter to verdict `review`/`apply` internally, but "what counts as in
+ * scope" turned out not to be one fixed answer: M10's market-wide study
+ * plan means high-compatibility postings; ADR-076's personal gap analysis
+ * means postings the operator actually applied to, or postings discarded
+ * specifically for an unmet competency (a different `discard` reason than
+ * "off-track", which `verdict` alone cannot distinguish). Each caller now
+ * decides that before calling this — see `composeStudyPlan` and
+ * `personal-gap-scope.ts` for the two current scopes.
+ *
+ * Pure, no I/O — same discipline as `aggregateCorpus`.
  */
 export function gapAnalysis(
   entries: readonly CorpusEntry[],
@@ -37,12 +41,9 @@ export function gapAnalysis(
   taxonomy: Taxonomy,
 ): GapAnalysisEntry[] {
   const covered = profileSkills(profile, taxonomy);
-  const highCompatibility = entries.filter(
-    (entry) => entry.verdict === "review" || entry.verdict === "apply",
-  );
 
   const counts = new Map<string, number>();
-  for (const entry of highCompatibility) {
+  for (const entry of entries) {
     for (const skill of skillsInPosting(entry, taxonomy)) {
       if (covered.has(skill)) continue;
       counts.set(skill, (counts.get(skill) ?? 0) + 1);
@@ -53,8 +54,7 @@ export function gapAnalysis(
     .map(([skill, count]) => ({
       skill,
       count,
-      percentage:
-        highCompatibility.length === 0 ? 0 : count / highCompatibility.length,
+      percentage: entries.length === 0 ? 0 : count / entries.length,
     }))
     .sort((a, b) => b.count - a.count);
 }

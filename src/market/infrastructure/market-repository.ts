@@ -57,7 +57,9 @@ export class MarketRepository {
    * posting shows, rather than silently mixing two models' judgments.
    */
   loadCorpus(profileHash: string, model: string): CorpusEntry[] {
-    const postings = new PostingsRepository(this.db).findActive();
+    const postingsRepo = new PostingsRepository(this.db);
+    const postings = postingsRepo.findActive();
+    const appliedAtByFingerprint = postingsRepo.findAppliedAtMap();
     const extractionsRepo = new ExtractionsRepository(this.db);
     const matchesRepo = new MatchesRepository(this.db);
     const scoringConfig = buildScoringConfig(this.criteria);
@@ -85,7 +87,7 @@ export class MarketRepository {
         hashRequirements(requirements),
       );
 
-      const verdict = matches
+      const outcome = matches
         ? computeScore(
             matches,
             classifyTrack(
@@ -94,10 +96,21 @@ export class MarketRepository {
               this.criteria.trackExclusions,
             ),
             scoringConfig,
-          ).verdict
+          )
         : null;
 
-      return { posting, requirements, matches, verdict };
+      return {
+        posting,
+        requirements,
+        matches,
+        verdict: outcome?.verdict ?? null,
+        // Same "no cached match data, nothing to derive from" null as
+        // `verdict` — ADR-076's personal gap analysis is the first
+        // consumer that needs these instead of discarding them.
+        blockingFailure: outcome?.blockingFailure ?? null,
+        criticalGaps: outcome?.criticalGaps ?? [],
+        appliedAt: appliedAtByFingerprint.get(posting.fingerprint) ?? null,
+      };
     });
   }
 }

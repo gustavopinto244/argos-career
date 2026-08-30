@@ -32,7 +32,15 @@ function entry(
     lastSeenAt: NOW,
     rawPayload: {},
   });
-  return { posting, requirements, matches: null, verdict };
+  return {
+    posting,
+    requirements,
+    matches: null,
+    verdict,
+    blockingFailure: null,
+    criticalGaps: [],
+    appliedAt: null,
+  };
 }
 
 function profile(): Profile {

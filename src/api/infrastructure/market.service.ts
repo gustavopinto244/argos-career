@@ -1,5 +1,9 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { executeStudyPlan } from "../../cli/main";
+import {
+  executePersonalGapAnalysis,
+  executeStudyPlan,
+  PersonalGapAnalysisParams,
+} from "../../cli/main";
 import { TextNotifier } from "../../delivery/infrastructure/telegram-notifier";
 import { Db } from "../../persistence/infrastructure/db";
 import { Criteria } from "../../prefilter/domain/criteria";
@@ -38,6 +42,19 @@ export class MarketService {
       this.profile,
       this.taxonomy,
       this.notifier,
+    );
+  }
+
+  /** ADR-076: read-only, no LLM spend, no delivery — reads what the
+   * postings the operator applied to (or was discarded from for a real
+   * competency gap) already say is missing. */
+  personalGapAnalysis(params: PersonalGapAnalysisParams) {
+    return executePersonalGapAnalysis(
+      this.db,
+      this.criteria,
+      this.profile,
+      this.taxonomy,
+      params,
     );
   }
 }

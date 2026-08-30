@@ -627,13 +627,20 @@ that falls out of work already planned:
 - **M7** emits `recommendedVariant`, `highlights` and `missingTerms`
 - **M6/M7** render them in the digest entry
 
-Generating prose is Phase 3 and stays out.
+Generating prose was Phase 3's original scope. It was dropped, not deferred
+(ADR-076, 2026-08-30) — see `01-vision-and-scope.md`'s "Recommending a
+resume vs. generating one" for why.
 
 ## Out of v1
 
-Phase 2 feedback (what was applied to, what got a response) and Phase 3
-generated communication — resume text, cover letters, recruiter messages.
-Recorded in `01-vision-and-scope.md` so they stay out.
+Phase 2's "feed back into weighting" half (there is no real outcome data yet
+to calibrate against) and generated communication — resume prose, cover
+letters, recruiter messages, application-form answers — dropped from the
+roadmap entirely for the reason `01-vision-and-scope.md` now records.
+Phase 2's "record what was applied to and what got a response" half and
+Phase 3's redefined scope (personal gap analysis over applied/discarded
+postings, and completing the outcome-tracking event coverage) shipped
+2026-08-30 (ADR-075, ADR-076).
 
 Junior and entry-level roles are also out, reconsidered and kept out; the
 reasoning and the two observable conditions for revisiting are in

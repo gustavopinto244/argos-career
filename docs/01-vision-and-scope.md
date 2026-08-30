@@ -87,7 +87,7 @@ an ADR, not a preference.
 | Out of scope                         | Reason                                                                                                         |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
 | Automatic job application            | Ban risk on the platforms that matter, and it optimizes the wrong step — the bottleneck is finding the posting |
-| **Generating** resume or letter text | See the distinction below. Recommending is in; writing is Phase 3                                              |
+| **Generating** resume or letter text | See the distinction below. Recommending is in; writing was Phase 3, dropped (ADR-076)                          |
 | Junior / entry-level roles           | Reasoned above under _Search profile_                                                                          |
 | Web interface                        | Telegram is the interface in v1. A UI is where this kind of project quietly dies                               |
 | Multi-user / SaaS                    | Personal product. Auth, tenancy and LGPD compliance with no upside                                             |
@@ -104,15 +104,22 @@ from the profile. This is almost free — it reuses `missingTerms` and
 `trackAlignment`, which the scoring model already produces. Nothing is written;
 material that already exists is selected and ranked.
 
-**Out of scope (Phase 3):** producing resume prose, cover letters, recruiter
-messages or application-form answers. That is a module with its own failure mode
-— a model writing about your experience will eventually write something you did
-not do, and the cost of that lands in an interview.
+**Out of scope, removed from the roadmap (ADR-076, 2026-08-30):** producing
+resume prose, cover letters, recruiter messages or application-form answers.
+This was originally deferred to "Phase 3." It is not deferred anymore — it is
+dropped. All four are artifacts written _before_ a candidature exists, which
+is exactly where "a model writing about your experience will eventually write
+something you did not do" is least checkable: there is no real outcome yet to
+ground the text against, only the profile's own claims restated in different
+words. Phase 3 was redefined around what the system can actually verify —
+see "Phases beyond v1" below.
 
-The governing rule for both, now and later: **never invent experience or
-competence.** The system rearranges emphasis on what is already in the profile.
-That rule is why the scoring model demands a verbatim evidence quote, and it
-extends unchanged to anything Phase 3 adds.
+The governing rule stands regardless: **never invent experience or
+competence.** The system rearranges emphasis on what is already in the
+profile. That rule is why the scoring model demands a verbatim evidence
+quote, and it is exactly why generated prose was dropped rather than
+attempted — there was no way to extend the rule to free text and keep it
+meaning anything.
 
 ## Success criteria
 
@@ -189,7 +196,7 @@ chain, in dependency order:
 ```
 Radar → Opportunity corpus → Compatibility scoring → History
       → Market analysis → Gap analysis → Study plan
-      → Resume recommendation → Personalized communication
+      → Resume recommendation → Personal gap analysis and outcome tracking
 ```
 
 Each link needs the one before it, which is why the order is not negotiable: gap
@@ -217,8 +224,20 @@ taxonomy is built in M10, over the accumulated corpus.
 
 Recorded so they stay out of v1, not as commitments.
 
-- **Phase 2 — Feedback.** Record what was applied to and what got a response, and
-  feed that back into weighting.
-- **Phase 3 — Generated communication.** Resume prose, cover letters, recruiter
-  messages, application-form answers. Possibly a dashboard, reconsidered on its
-  merits at that point rather than assumed now.
+- **Phase 2 — Feedback.** Record what was applied to and what got a response.
+  First slice shipped 2026-08-30 (ADR-075): `postings.appliedAt` (ADR-072) for
+  "applied", `application_events` for what happens after — a recruiter
+  response, an interview, an outcome. "Feed that back into weighting" is
+  still out: there is no real outcome data yet to calibrate against.
+- **Phase 3 — Personal gap analysis and outcome tracking (redefined
+  2026-08-30, ADR-076).** Originally scoped as "Generated communication" —
+  see the correction above. The real value the system can add after a
+  candidature exists, all grounded in fact already computed rather than
+  written from scratch: which skills are actually missing, measured against
+  postings you applied to and postings discarded specifically for an unmet
+  requirement (not merely off-track); and completing Phase 2's own event
+  coverage — an operator- or Hermes-reported interview, rejection or offer,
+  not just the "applied" bookmark. Reuses M10's `gapAnalysis` and Phase 2's
+  `application_events` almost entirely as-is; the new work is scoping, not
+  new computation. A dashboard for this data is still possible, reconsidered
+  on its merits if/when it comes up — not assumed now, same as before.

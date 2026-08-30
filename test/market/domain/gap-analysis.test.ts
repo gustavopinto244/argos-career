@@ -36,7 +36,15 @@ function entry(
     lastSeenAt: NOW,
     rawPayload: {},
   });
-  return { posting, requirements, matches: null, verdict };
+  return {
+    posting,
+    requirements,
+    matches: null,
+    verdict,
+    blockingFailure: null,
+    criticalGaps: [],
+    appliedAt: null,
+  };
 }
 
 function profile(competencyNames: string[]): Profile {
@@ -85,16 +93,20 @@ describe("gapAnalysis", () => {
     expect(result).toEqual([]);
   });
 
-  it("excludes discard-verdict and unscored postings", () => {
+  // ADR-076: gapAnalysis no longer filters by verdict itself — "what's in
+  // scope" varies by caller (market-wide high-compatibility postings vs.
+  // personally applied/discarded ones), so it now runs over exactly the
+  // entries it is given, whatever their verdict.
+  it("counts every entry it is given, regardless of verdict", () => {
     const entries = [
       entry([requirement("PostgreSQL required")], "discard"),
       entry([requirement("PostgreSQL required")], null),
     ];
     const result = gapAnalysis(entries, profile([]), TAXONOMY);
-    expect(result).toEqual([]);
+    expect(result).toEqual([{ skill: "PostgreSQL", count: 2, percentage: 1 }]);
   });
 
-  it("returns an empty array when no posting is high-compatibility", () => {
+  it("returns an empty array when given no entries", () => {
     expect(gapAnalysis([], profile([]), TAXONOMY)).toEqual([]);
   });
 });
