@@ -111,8 +111,9 @@ generalizes the principle behind it rather than replacing it.
 
 ## Consequences
 
-**The 111 already-blanked rows are not repaired by this change.** It stops
-the destruction; it does not undo it. Each will refill on its next real
+**The 111 already-blanked rows are not repaired by this change** — see
+Amendment 1, which repairs them separately. It stops the destruction; it does
+not undo it. Each will refill on its next real
 scoring pass, because `ApiScorer` calls `updateExtractedFields` on every
 score including a cache hit — but only for postings that get scored again,
 and an already-notified posting will not. A one-off backfill from
@@ -133,3 +134,57 @@ invalidate.
 
 **Verified by reverting.** Six tests in
 `test/persistence/postings-repository.test.ts` fail without the change.
+
+---
+
+## Amendment 1 — the backfill, performed 2026-08-30
+
+The decision above deliberately shipped the fix without repairing the rows it
+had already lost, so that PR was provably about one behaviour change. The
+repair was run separately, on the operator's explicit go-ahead.
+
+**Two things happened between the fix landing and the backfill, and they are
+worth separating.** The fix alone already moved the number: a full
+re-collection of 2,354 postings took the blanked count from 111 to 91,
+because values written by scoring now survived a collect instead of being
+overwritten. Under the previous behaviour that same re-collection could only
+have moved it the other way. That is the fix working, observed rather than
+argued.
+
+The remaining rows needed the backfill, because a posting already marked
+`notifiedAt` is not re-scored, so nothing would ever rewrite its column.
+
+**What was checked before writing anything:**
+
+| Check                                                     | Result                             |
+| --------------------------------------------------------- | ---------------------------------- |
+| fingerprints holding more than one `extractions` row      | 17                                 |
+| of those, any disagreeing about `seniority`               | **0**                              |
+| postings whose stored value _differs_ from the extraction | **0**                              |
+| distinct postings to fill                                 | 89 seniority, 1 `experience_years` |
+
+The 17 duplicates agreeing means the choice of row could not change the
+outcome; the query still orders by `extracted_at DESC` for determinism rather
+than relying on that. Zero conflicts means the backfill only ever fills a
+null — it never overwrites a value the pipeline had reason to hold.
+
+A dedicated `VACUUM INTO` backup was taken first
+(`argos-pre-backfill-2026-08-30T12-27-05-723Z.db`, 117 MB) and validated by
+reopening it and counting both tables, rather than trusting that the write
+succeeded. The two `UPDATE`s ran inside one transaction.
+
+**Result:** 89 + 1 rows changed. Of the 196 postings holding an extraction,
+those without a `seniority` went from 90 to **1** — and that last one is
+genuinely unknown, its extraction having returned null. `PRAGMA quick_check`
+returned `ok`, the posting count was unchanged at 4,367, and zero postings
+now diverge from their extraction.
+
+M10's experience-level breakdown over the extracted corpus, which was the
+consequence that made this worth repairing at all, reads
+`internship: 192, trainee: 3, unknown: 1` where it previously reported
+roughly half the corpus as unknown.
+
+**This does not change the decision above**, only its "not repaired"
+consequence. Option B — moving `seniority`/`experienceYears` out of `postings`
+entirely, since they already live in `extractions` — remains the open
+structural follow-up, and remains deferred.
