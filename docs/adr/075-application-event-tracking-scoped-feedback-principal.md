@@ -91,7 +91,8 @@ New MCP tools: `record_application_event` (write, gated to
 `admin`/`feedback`) and `list_application_events` (read, open to any
 principal that can already read `list_postings` — no email content is ever
 in this table, so there is nothing this read exposes that the write side
-didn't already accept). REST symmetry on `PostingsController` —
+didn't already accept). **That last justification turned out to be false —
+see Amendment 1.** REST symmetry on `PostingsController` —
 `POST`/`GET /postings/:fingerprint/application-events` — for the same
 reason `mark_applied`/`discard` already have it: a single-posting action the
 operator plausibly wants to make by hand, seeing a rejection email
@@ -149,3 +150,45 @@ each reversion makes a corresponding test fail (one of them at compile
 time — removing the `feedback` REST branch left `authorizeRequest`'s
 final `source-ingest`-only fallthrough trying to read `.source` off a
 `feedback` principal, which `tsc` itself rejects before any test runs).
+
+---
+
+## Amendment 1 — the read was gated, and this ADR's own reasoning corrected (2026-08-30)
+
+The decision above left `list_application_events` open to any principal
+reaching `POST /mcp`, on this stated ground: _"no email content is ever in
+this table, so there is nothing this read exposes that the write side
+didn't already accept."_
+
+**That was true when written and false within days**, falsified by work
+this same ADR invited. `record_application_event`'s `note` field is
+documented as free text "never read by any pipeline code" — which says
+nothing about what goes _into_ it. The Hermes outcome-tracking skill built
+on top of this ADR (its own "Out of scope" section named that skill as the
+natural follow-up) records a literal quote of the recruiter's email into
+`note`. Verified in production:
+
+```
+"note": "Email de 28/08: 'optamos por seguir com outros candidatos
+         que estão mais alinhados com as necessidades específicas da vaga.'"
+```
+
+So the table does carry email content, and an `automation` credential — a
+principal that exists to trigger pipeline stages on a schedule, not to read
+personal correspondence — could read it.
+
+**Corrected:** `list_application_events` is gated to `["admin",
+"feedback"]`, exactly matching `record_application_event`'s own gating.
+There is no coherent reason a read should be broader than the write for the
+same rows, and stating one was the mistake.
+
+**Not exploited.** No `API_AUTOMATION_KEY` is configured on Atlas today, so
+no automation principal ever existed to read it. This was latent, not live.
+
+**The general lesson, worth more than the fix:** the original sentence is an
+assertion about data the schema does not constrain. `note` is `text`,
+nullable, with no validation on content — nothing in the code made "no
+email content" true, so nothing kept it true when a later caller decided
+otherwise. `verify-claims-in-comments` applies to ADRs as much as to code
+comments: a stated guarantee with no mechanism behind it is a guess with
+better formatting.

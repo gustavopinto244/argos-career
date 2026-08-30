@@ -354,7 +354,21 @@ export class McpController {
           fingerprint: z.string().describe("The posting's fingerprint."),
         },
       },
-      ({ fingerprint }) => safely(() => this.feedback.list(fingerprint)),
+      ({ fingerprint }) =>
+        safely(() => {
+          // Gated to exactly the principals that can WRITE these events.
+          // ADR-075 originally left this read open, justified as "no email
+          // content is ever in this table" — that is no longer true, and was
+          // falsified by the outcome-tracking Hermes skill built days later,
+          // which records a literal quote of the recruiter's email into
+          // `note` (verified in production: "Email de 28/08: 'optamos por
+          // seguir com outros candidatos...'"). `automation` exists to
+          // trigger pipeline stages, not to read personal correspondence,
+          // and there is no reason a read should be broader than the write
+          // for the same rows.
+          requirePrincipalKind(principal, ["admin", "feedback"]);
+          return this.feedback.list(fingerprint);
+        }),
     );
 
     server.registerTool(
