@@ -31,30 +31,60 @@ function parseLocationAndWorkMode(raw: string | null | undefined): {
   };
   if (!raw) return unknown;
 
-  const match = /^(.*)\(([^)]+)\)\s*$/.exec(raw);
-  if (!match) return unknown;
+  // The parenthetical is optional. It used to be required, and its absence
+  // discarded the *city* as well — a string this function can read perfectly
+  // well ("Rio de Janeiro, RJ") returned `unknown` for both fields, throwing
+  // away a fact that was right there. The work mode is what is genuinely
+  // absent; the place is not.
+  const match = /^(.*?)\s*\(([^)]+)\)\s*$/.exec(raw);
+  const place = (match ? (match[1] ?? "") : raw).trim();
+  const workMode = match ? mapWorkModeLabel(match[2]?.trim() ?? "") : "unknown";
 
-  const [, place, modeLabel] = match;
-  const workMode = mapWorkModeLabel(modeLabel?.trim() ?? "");
-  const placeTrimmed = place?.trim() ?? "";
-
-  if (!placeTrimmed || placeTrimmed.toLowerCase() === "brasil") {
+  if (!place || place.toLowerCase() === "brasil") {
     return { location: { kind: "unknown" }, workMode };
   }
-  const city = placeTrimmed.split(",")[0]?.trim();
+  const city = place.split(",")[0]?.trim();
   return {
     location: city ? { kind: "known", city } : { kind: "unknown" },
     workMode,
   };
 }
 
+/**
+ * Both languages, because the alert email's language follows the LinkedIn
+ * account's UI setting, not the postings' country. Measured, not assumed:
+ * every real LinkedIn row on production (2026-08-29, both of them, the only
+ * two that have ever landed since `docs/11-known-issues.md` B15 was
+ * unblocked) carries an **English** label — `"Nova Iguaçu, RJ (On-site)"`,
+ * `"Rio de Janeiro, RJ (On-site)"`. A Portuguese-only mapper therefore read
+ * `unknown` for 100% of real input.
+ *
+ * That is not a cosmetic loss. `isLocationAllowed` (`pre-filter.ts`) tests
+ * `workMode === "remote"` **first** and passes such a posting regardless of
+ * city; a `"São Paulo, SP (Remote)"` alert read as `unknown` instead falls
+ * through to the city check, fails it, and is rejected as
+ * `location_not_allowed` before any LLM call — silently discarding exactly
+ * the remote postings this source is best at supplying.
+ *
+ * Substring-matched, not equality: LinkedIn has shipped `"Remote"`,
+ * `"Hybrid"` and `"On-site"` as well as forms with extra text, and the
+ * hyphen in `"On-site"` is not stable across locales.
+ */
 function mapWorkModeLabel(label: string): WorkMode {
-  const normalized = label.toLowerCase();
-  if (normalized.includes("remoto")) return "remote";
-  if (normalized.includes("híbrido") || normalized.includes("hibrido")) {
+  const normalized = label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/-/g, "");
+  if (normalized.includes("remoto") || normalized.includes("remote")) {
+    return "remote";
+  }
+  if (normalized.includes("hibrido") || normalized.includes("hybrid")) {
     return "hybrid";
   }
-  if (normalized.includes("presencial")) return "onsite";
+  if (normalized.includes("presencial") || normalized.includes("onsite")) {
+    return "onsite";
+  }
   return "unknown";
 }
 

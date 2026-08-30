@@ -118,7 +118,10 @@ describe("normalizeLinkedinAlertJob", () => {
       expect(posting?.workMode).toBe("unknown");
     });
 
-    it("is unknown/unknown when the trailing parenthetical is missing entirely", () => {
+    // Behaviour deliberately changed (phase-1 review, 2026-08-29). This case
+    // used to assert unknown/unknown, which threw away a city the string
+    // states plainly. Only the work mode is genuinely absent here.
+    it("keeps the city when the trailing parenthetical is missing entirely", () => {
       const posting = normalizeLinkedinAlertJob(
         rawPosting({
           title: "x",
@@ -127,7 +130,10 @@ describe("normalizeLinkedinAlertJob", () => {
         }),
         NOW,
       );
-      expect(posting?.location).toEqual({ kind: "unknown" });
+      expect(posting?.location).toEqual({
+        kind: "known",
+        city: "Rio de Janeiro",
+      });
       expect(posting?.workMode).toBe("unknown");
     });
 
@@ -244,5 +250,85 @@ describe("normalizeLinkedinAlertJob", () => {
       expect(posting?.location).toEqual({ kind: "unknown" });
       expect(posting?.workMode).toBe("remote");
     });
+  });
+});
+
+describe("work-mode labels arrive in the account's UI language, not Portuguese", () => {
+  // Measured on production 2026-08-29: both real LinkedIn rows that have
+  // ever landed carry an ENGLISH label — "Nova Iguacu, RJ (On-site)" and
+  // "Rio de Janeiro, RJ (On-site)". The Portuguese-only mapper read
+  // `unknown` for 100% of real input.
+  it.each([
+    ["Rio de Janeiro, RJ (On-site)", "onsite", "Rio de Janeiro"],
+    ["Rio de Janeiro, RJ (Onsite)", "onsite", "Rio de Janeiro"],
+    ["Sao Paulo, SP (Remote)", "remote", "Sao Paulo"],
+    ["Sao Paulo, SP (Hybrid)", "hybrid", "Sao Paulo"],
+    ["Rio de Janeiro, RJ (Presencial)", "onsite", "Rio de Janeiro"],
+    ["Sao Paulo, SP (Remoto)", "remote", "Sao Paulo"],
+    ["Sao Paulo, SP (H\u00edbrido)", "hybrid", "Sao Paulo"],
+  ])("reads %s as %s", (location, workMode, city) => {
+    const posting = normalizeLinkedinAlertJob(
+      rawPosting({
+        title: "Estagio Backend",
+        company: "Empresa X",
+        location,
+        link: "https://www.linkedin.com/jobs/view/4100000009/",
+      }),
+      NOW,
+    );
+    expect(posting?.workMode).toBe(workMode);
+    expect(posting?.location).toEqual({ kind: "known", city });
+  });
+
+  // The consequence the mapper actually has to protect: `isLocationAllowed`
+  // tests `workMode === "remote"` before the city list, so an unrecognized
+  // label turns a remote posting outside the target cities into a
+  // `location_not_allowed` rejection before any LLM call.
+  it("keeps a remote out-of-region alert readable as remote", () => {
+    const posting = normalizeLinkedinAlertJob(
+      rawPosting({
+        title: "Estagio Backend",
+        company: "Empresa X",
+        location: "Belo Horizonte, MG (Remote)",
+        link: "https://www.linkedin.com/jobs/view/4100000010/",
+      }),
+      NOW,
+    );
+    expect(posting?.workMode).toBe("remote");
+  });
+});
+
+describe("a location with no work-mode parenthetical still yields its city", () => {
+  // The parenthetical used to be required by the regex, and its absence
+  // discarded the city too — a fact plainly present in the string.
+  it("reads the city and leaves only the work mode unknown", () => {
+    const posting = normalizeLinkedinAlertJob(
+      rawPosting({
+        title: "Estagio Backend",
+        company: "Empresa X",
+        location: "Rio de Janeiro, RJ",
+        link: "https://www.linkedin.com/jobs/view/4100000011/",
+      }),
+      NOW,
+    );
+    expect(posting?.location).toEqual({
+      kind: "known",
+      city: "Rio de Janeiro",
+    });
+    expect(posting?.workMode).toBe("unknown");
+  });
+
+  it("still maps a bare Brasil to an unknown location", () => {
+    const posting = normalizeLinkedinAlertJob(
+      rawPosting({
+        title: "Estagio Backend",
+        company: "Empresa X",
+        location: "Brasil",
+        link: "https://www.linkedin.com/jobs/view/4100000012/",
+      }),
+      NOW,
+    );
+    expect(posting?.location).toEqual({ kind: "unknown" });
+    expect(posting?.workMode).toBe("unknown");
   });
 });
