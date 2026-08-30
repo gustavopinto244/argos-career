@@ -1,4 +1,9 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   ApplicationEventKind,
   createApplicationEvent,
@@ -53,13 +58,28 @@ export class FeedbackService {
       );
     }
 
-    const event = createApplicationEvent({
-      fingerprint: input.fingerprint,
-      kind: input.kind,
-      note: input.note,
-      occurredAt: input.occurredAt ? new Date(input.occurredAt) : new Date(),
-      recordedBy,
-    });
+    // The domain factory rejects a malformed body with a plain `Error`,
+    // which NestJS maps to a bare 500 "Internal server error" — telling the
+    // caller the server broke when in fact their input was wrong, and
+    // giving them nothing to correct. Translating here is the same split
+    // `PostingsService` already draws with `NotFoundException`: the domain
+    // stays free of HTTP concepts, and the service decides what the wire
+    // should say. `cause` is kept so the real reason still reaches the log.
+    let event;
+    try {
+      event = createApplicationEvent({
+        fingerprint: input.fingerprint,
+        kind: input.kind,
+        note: input.note,
+        occurredAt: input.occurredAt ? new Date(input.occurredAt) : new Date(),
+        recordedBy,
+      });
+    } catch (cause) {
+      throw new BadRequestException(
+        cause instanceof Error ? cause.message : "Invalid application event",
+        { cause },
+      );
+    }
 
     new ApplicationEventsRepository(this.db).record(event);
     return { fingerprint: event.fingerprint, kind: event.kind };

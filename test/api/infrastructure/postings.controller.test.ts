@@ -243,7 +243,9 @@ describe("POST/GET /postings/:fingerprint/application-events (ADR-075)", () => {
       .expect(404);
   });
 
-  it("rejects an unrecognized kind", async () => {
+  // Was written expecting 500 — that pinned the wrong behaviour. A
+  // malformed body is a 400, and the message has to name the field.
+  it("rejects an unrecognized kind with 400 and names the field", async () => {
     const fingerprint = seedPosting();
     await auth(
       request(app.getHttpServer()).post(
@@ -251,7 +253,10 @@ describe("POST/GET /postings/:fingerprint/application-events (ADR-075)", () => {
       ),
     )
       .send({ kind: "applied" })
-      .expect(500);
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.message).toMatch(/kind is not recognized/);
+      });
   });
 
   // The REST body has no ValidationPipe behind it (src/main.ts registers
@@ -266,7 +271,12 @@ describe("POST/GET /postings/:fingerprint/application-events (ADR-075)", () => {
       ),
     )
       .send({ kind: "rejected", occurredAt: "garbage" })
-      .expect(500);
+      // 400, not 500: a malformed body is the caller's error, and the
+      // message has to name the field so they can fix it.
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.message).toMatch(/occurredAt must be a valid date/);
+      });
 
     // The point is that nothing was written, not merely that it errored.
     const listed = await auth(
