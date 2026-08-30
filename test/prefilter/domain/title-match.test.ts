@@ -148,3 +148,43 @@ describe("keywordMatchesText — track keywords (ADR-011 Amendment 2)", () => {
     ).toBe(false);
   });
 });
+
+describe("keywordMatchesText — punctuation that separates vs punctuation that joins", () => {
+  // Both halves of this are real regressions, in opposite directions.
+  //
+  // Deleting all punctuation (the original collapsed pass) turned
+  // "TI/Segurança" into the single token "tiseguranca", so `segurança` did
+  // not match and a genuine security posting lost its track — with
+  // `rejectUnknownTrack` on, discarded before any LLM saw it. Splitting on
+  // all punctuation turns "Node.js" into "node js", so the alias `js`
+  // matches it and inflates M10's JavaScript counts.
+  it.each([
+    ["Estágio TI/Segurança da Informação", "segurança"],
+    ["Desenvolvimento/Automação", "automação"],
+    ["Suporte/Infraestrutura", "infraestrutura"],
+  ])("matches %s against a keyword separated only by a slash", (title, kw) => {
+    expect(keywordMatchesText(title, kw)).toBe(true);
+  });
+
+  it.each([
+    ["Node.js e React", "js"],
+    ["Vue.js no front", "js"],
+  ])("still does not match %s against the bare alias %s", (title, kw) => {
+    expect(keywordMatchesText(title, kw)).toBe(false);
+  });
+
+  it("still matches the alias when it is genuinely its own word", () => {
+    expect(keywordMatchesText("Noções de JS", "js")).toBe(true);
+  });
+
+  it("still collapses joining punctuation both ways", () => {
+    expect(keywordMatchesText("Back-End Developer", "back-end")).toBe(true);
+    expect(keywordMatchesText("Backend Developer", "back-end")).toBe(true);
+    expect(keywordMatchesText("Node.js e React", "node.js")).toBe(true);
+  });
+
+  it("still refuses a short token inside an unrelated word", () => {
+    expect(keywordMatchesText("Estágio em Fisioterapia", "api")).toBe(false);
+    expect(keywordMatchesText("Redes sociais", "soc")).toBe(false);
+  });
+});

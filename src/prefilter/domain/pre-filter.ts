@@ -3,7 +3,7 @@ import { Posting } from "../../posting/domain/posting";
 import { Track } from "../../scoring/domain/types";
 import { classifyTrack } from "./classify-track";
 import { Criteria } from "./criteria";
-import { titleMatchesAny } from "./title-match";
+import { keywordMatchesText, titleMatchesAny } from "./title-match";
 
 export type PreFilterRejectionReason =
   | "title_blocked"
@@ -40,11 +40,37 @@ function isCompanyBlocked(posting: Posting, criteria: Criteria): boolean {
   );
 }
 
-/** `null` (no stated deadline) is unknown, not expired — absence is not
- * evidence a posting has closed. */
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * `null` (no stated deadline) is unknown, not expired — absence is not
+ * evidence a posting has closed.
+ *
+ * **A date-only deadline covers its whole day, not its first instant.**
+ * Sources state these as a bare date (Gupy sends `"2026-09-22"`; 661 stored
+ * postings carry one), which parses to UTC midnight — 21:00 the *previous*
+ * day in São Paulo. Comparing that instant directly made a posting expire
+ * before its last valid application day even began: the 03:00 nightly run on
+ * the deadline date itself already read it as closed and discarded it.
+ *
+ * So a deadline landing exactly on UTC midnight is read as "through the end
+ * of that day" and gets the full day added. Any deadline carrying a real
+ * time-of-day is left alone — that is a genuine instant, not a date.
+ *
+ * The residual gap, stated rather than papered over: end-of-day is computed
+ * in UTC, so the window closes at 21:00 São Paulo time on the final day
+ * rather than midnight. No scheduled run falls in those three hours (ADR-009
+ * puts scoring at 03:00), and erring this way costs at most a few hours on a
+ * closing posting, where the previous behaviour cost a full day on an open
+ * one. Making it exact would mean threading the configured timezone into a
+ * pure domain function for a window nothing currently runs in.
+ */
 function isExpired(posting: Posting, now: Date): boolean {
   if (posting.applicationDeadline === null) return false;
-  return posting.applicationDeadline.getTime() < now.getTime();
+  const deadline = posting.applicationDeadline.getTime();
+  const isDateOnly = deadline % ONE_DAY_MS === 0;
+  const closesAt = isDateOnly ? deadline + ONE_DAY_MS : deadline;
+  return closesAt <= now.getTime();
 }
 
 /**
@@ -226,22 +252,37 @@ function isLocationAllowed(posting: Posting, criteria: Criteria): boolean {
 }
 
 /**
- * Deliberately still substring-matched against the *fingerprint* normalizer,
- * unlike the title blocklist/required rules above. Profile keywords carry
- * the same punctuation variants the track keywords do — "Node.js",
- * "back-end", "CI/CD" — and whole-word matching would need every spelling
- * listed. None of them is a short token that collides with an ordinary
- * Portuguese word, which is the specific failure that forced the title
- * rules to change, so the tradeoff lands the other way here.
+ * Whole-word matched via `keywordMatchesText`, the same function the track
+ * rules use — **not** substring-matched, which is what this did before.
+ *
+ * The old comment claimed no profile keyword was "a short token that
+ * collides with an ordinary Portuguese word". Measured against the real
+ * corpus, that was false in the same way ADR-011 Amendment 1's identical
+ * claim was: as a substring, `ci` matches **270** titles ("espe*ci*al",
+ * "so*ci*al", "farmá*ci*a") against 0 as a whole word; `git` 5 vs 0; `cd` 5
+ * vs 0. With `minKeywordAdherence` at any positive floor, those matches make
+ * the rule pass everything — a filter that filters nothing.
+ *
+ * It stayed invisible because the floor is `0`, which short-circuits before
+ * any matching runs. So this was a rule that had never actually executed
+ * against production data, carrying a comment asserting it was safe to turn
+ * on. `keywordMatchesText` also handles the punctuation variants the old
+ * comment worried about ("Node.js", "back-end", "CI/CD") through its
+ * collapsed pass, so nothing is lost by the change.
+ *
+ * Takes the raw title, not the pre-normalized one: `keywordMatchesText`
+ * applies its own two normalizations, and handing it an
+ * already-punctuation-stripped string would destroy the word boundaries it
+ * depends on.
  */
 function hasMinKeywordAdherence(
-  normalizedTitle: string,
+  title: string,
   profileKeywords: readonly string[],
   floor: number,
 ): boolean {
   if (floor <= 0) return true;
   const matched = profileKeywords.filter((keyword) =>
-    normalizedTitle.includes(normalize(keyword)),
+    keywordMatchesText(title, keyword),
   ).length;
   return matched >= floor;
 }
@@ -264,7 +305,6 @@ export function applyPreFilter(
   profileKeywords: readonly string[],
   now: Date,
 ): PreFilterOutcome {
-  const normalizedTitle = normalize(posting.title);
   const tracks = classifyTrack(
     posting.title,
     criteria.tracks,
@@ -323,7 +363,7 @@ export function applyPreFilter(
   }
   if (
     !hasMinKeywordAdherence(
-      normalizedTitle,
+      posting.title,
       profileKeywords,
       criteria.minKeywordAdherence,
     )

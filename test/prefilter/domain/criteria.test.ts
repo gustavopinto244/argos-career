@@ -314,3 +314,33 @@ describe("CriteriaSchema", () => {
     });
   });
 });
+
+describe("CriteriaSchema rejects unrecognized keys instead of stripping them", () => {
+  // Every rule in this schema has a permissive default, so a plain z.object
+  // turned a typo into a silently disabled rule: the file still said what
+  // you meant and the filter no longer did it. `CollectionQuerySchema`'s own
+  // comment records this landing once already, with `type:`.
+  it.each([
+    ["maxAgeDay", 7],
+    ["stillListedWithinHour", 30],
+    ["stillListedMaxAgeDay", 90],
+    ["rejectUnknownTracks", true],
+    ["minKeywordAdherance", 2],
+  ])("rejects the near-miss key %s", (key, value) => {
+    const result = CriteriaSchema.safeParse({
+      ...validCriteria(),
+      [key]: value,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unrecognized key inside a nested object too", () => {
+    const base = validCriteria();
+    expect(
+      CriteriaSchema.safeParse({
+        ...base,
+        location: { ...base.location, allowRemoteWork: true },
+      }).success,
+    ).toBe(false);
+  });
+});
