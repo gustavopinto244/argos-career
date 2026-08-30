@@ -1209,6 +1209,26 @@ export async function executeDeliver(
     if (notAttempted > 0) {
       counts.not_attempted_after_run_failure = notAttempted;
     }
+    // Recorded under its own name rather than left out of the map entirely.
+    //
+    // ADR-068's budget is not a failure, and labelling it
+    // `not_attempted_after_run_failure` was wrong — that is what the previous
+    // change corrected by subtracting it above. But dropping it from the map
+    // altogether broke a different invariant that `evaluateDeliveryOutcome`
+    // depends on: it computes `missingScores = filteredCount - scoredCount`
+    // (which still includes deferrals) and only trusts this breakdown when
+    // the two reconcile, falling back to `{ unclassified: N }` otherwise. So
+    // a healthy run that deferred anything reported "N postings were left
+    // without a score (unclassified=N)" — the operator told there is
+    // something to investigate, and given no name for it.
+    //
+    // Naming it keeps the arithmetic reconciling *and* tells the truth: those
+    // postings genuinely were left unscored this run, for a reason the
+    // operator should see, and each already carries its own `deferred`
+    // posting_event saying `international_budget_exhausted`.
+    if (deferredCount > 0) {
+      counts.deferred_international_budget = deferredCount;
+    }
     return counts;
   }
 

@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { evaluateDeliveryOutcome } from "../../src/scheduling/domain/alerts";
 import { eq } from "drizzle-orm";
 import { postings } from "../../src/persistence/infrastructure/schema";
 import {
@@ -1705,6 +1706,46 @@ describe("executeDeliver", () => {
     // them in full.
     const unnotified = new PostingsRepository(db).findUnnotified();
     expect(unnotified.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("names the budget in the run row, so the alert does not read 'unclassified'", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: Array.from({ length: 5 }, (_, i) => ({
+        source: "gupy",
+        sourceId: String(i + 1),
+        payload: gupyPayload(i + 1, "Estágio em Backend", `Empresa ${i + 1}`),
+      })),
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const criteria = {
+      ...deliverCriteria(),
+      sourceDefaultCountry: {},
+      maxInternationalPerRun: 2,
+    };
+    const { notifier } = recordingNotifier();
+    const outcome = await executeDeliver(
+      db,
+      new StubScorer(criteria),
+      notifier,
+      criteria,
+      deliverProfile(),
+    );
+
+    const run = new RunsRepository(db).findById(outcome.runId);
+    expect(parseScoreFailureCounts(run!)).toEqual({
+      deferred_international_budget: 3,
+    });
+
+    // The invariant `evaluateDeliveryOutcome` actually depends on: the
+    // persisted breakdown must add up to `filteredCount - scoredCount`, or it
+    // falls back to reporting `unclassified` and names nothing.
+    const alerts = evaluateDeliveryOutcome(run!, 0.5);
+    const impact = alerts.find((a) => a.key === "scoring:impact");
+    expect(impact?.text).toContain("deferred_international_budget=3");
+    expect(impact?.text).not.toContain("unclassified");
   });
 
   it("does not record a failure counter for what the budget deferred (ADR-068)", async () => {

@@ -1,4 +1,5 @@
 import {
+  parseFailedSources,
   parseLlmErrorTypeCounts,
   parseLlmOutcomeCounts,
   parseLlmProviderCounts,
@@ -55,16 +56,32 @@ export function evaluateCollectionHealth(
 
   const lastN = recentRuns.slice(0, threshold);
 
+  // Neither message names a source any more. Both used to be prefixed
+  // `gupy:` — true when this was written and Gupy was the only collector,
+  // and stale since: `config/criteria.yaml` now issues 20 queries across
+  // four pulled sources (ciee, gupy, infojobs, nerdin), and one `collect`
+  // run covers all of them, with `collectedCount` summing the lot. An
+  // operator woken by "gupy: 3 consecutive collection runs errored" would go
+  // and check Gupy, which may be the one source that was fine.
+  //
+  // The errored case can do better than merely not lying: `failed_sources`
+  // already records which sources actually failed each run (docs/11 B2), so
+  // the alert names them instead of leaving the operator to go and look.
   if (lastN.every((r) => r.outcome === "success" && r.collectedCount === 0)) {
     alerts.push({
-      text: `gupy: ${threshold} consecutive collection runs found zero postings.`,
+      text: `${threshold} consecutive collection runs found zero postings across every source.`,
       key: "collection:empty",
     });
   }
 
   if (lastN.every((r) => r.outcome === "failed")) {
+    const failed = [...new Set(lastN.flatMap((r) => parseFailedSources(r)))]
+      .sort()
+      .join(", ");
     alerts.push({
-      text: `gupy: ${threshold} consecutive collection runs errored.`,
+      text:
+        `${threshold} consecutive collection runs errored` +
+        (failed ? ` (failing sources: ${failed}).` : "."),
       key: "collection:errored",
     });
   }
