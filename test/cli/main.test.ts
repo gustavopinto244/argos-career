@@ -1707,6 +1707,45 @@ describe("executeDeliver", () => {
     expect(unnotified.length).toBeGreaterThanOrEqual(3);
   });
 
+  it("does not record a failure counter for what the budget deferred (ADR-068)", async () => {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: new Date(),
+      postings: Array.from({ length: 5 }, (_, i) => ({
+        source: "gupy",
+        sourceId: String(i + 1),
+        payload: gupyPayload(i + 1, "Estágio em Backend", `Empresa ${i + 1}`),
+      })),
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const criteria = {
+      ...deliverCriteria(),
+      sourceDefaultCountry: {},
+      maxInternationalPerRun: 2,
+    };
+    const { notifier } = recordingNotifier();
+    const outcome = await executeDeliver(
+      db,
+      new StubScorer(criteria),
+      notifier,
+      criteria,
+      deliverProfile(),
+    );
+
+    // `filteredCount` is `ranked.length` and deliberately includes what the
+    // budget deferred, so the run-row arithmetic has to subtract it back out.
+    // Without that term this healthy `success` run reported
+    // `not_attempted_after_run_failure: 3` — a failure counter naming three
+    // postings that were deliberately postponed and already carry their own
+    // `deferred` event.
+    const run = new RunsRepository(db).findById(outcome.runId);
+    expect(run?.outcome).toBe("success");
+    expect(parseScoreFailureCounts(run!)).not.toHaveProperty(
+      "not_attempted_after_run_failure",
+    );
+  });
+
   it("is inert when maxInternationalPerRun is null (ADR-068)", async () => {
     const collector = stubCollector({
       source: "gupy",

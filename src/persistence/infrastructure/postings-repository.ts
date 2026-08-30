@@ -150,13 +150,42 @@ export class PostingsRepository {
           locationKind: posting.location.kind,
           locationCity,
           workMode: posting.workMode,
-          seniority: posting.seniority,
-          experienceYears: posting.experienceYears,
-          applicationDeadline: posting.applicationDeadline,
-          publishedAt: posting.publishedAt,
-          sourceUrl: posting.sourceUrl,
-          description: posting.description,
-          country: posting.country,
+          // `??` on every field below, not plain assignment. A re-collection
+          // carries what the *source* states right now; a null there means
+          // "this source does not carry this fact", never "the fact was
+          // retracted" — the exact reading `Posting`'s own field comments
+          // already give ("absence is not evidence"). Overwriting a stored
+          // value with that null destroys a fact for no gain.
+          //
+          // `seniority`/`experienceYears` are the airtight case: no
+          // normalizer ever sets them. They are Stage A output, written by
+          // `updateExtractedFields`, so this UPDATE could only ever destroy
+          // them — and did. Measured on production before the fix: **111 of
+          // 214 postings (52%) that hold a cached Stage A extraction had
+          // `postings.seniority` back at null** while `extractions.seniority`
+          // still said `internship`. `aggregate-corpus.ts` reads the posting
+          // column (`entry.posting.seniority ?? "unknown"`), so M10's
+          // seniority breakdown was reporting "unknown" for half the corpus
+          // it had already paid a model call to classify.
+          //
+          // The rest are source data, but the same reasoning applies across
+          // sources: a LinkedIn alert states no description at all
+          // (`normalizeLinkedinAlertJob` hardcodes null), and 24 fingerprints
+          // have already been collected from more than one source — so a
+          // collision would blank a Gupy description and leave Stage A with
+          // nothing to extract.
+          //
+          // `source`/`sourceId`/`company`/`title`/`location`/`workMode` above
+          // are deliberately NOT coalesced: those are always stated, and the
+          // latest statement is the one to keep.
+          seniority: posting.seniority ?? existing.seniority,
+          experienceYears: posting.experienceYears ?? existing.experienceYears,
+          applicationDeadline:
+            posting.applicationDeadline ?? existing.applicationDeadline,
+          publishedAt: posting.publishedAt ?? existing.publishedAt,
+          sourceUrl: posting.sourceUrl ?? existing.sourceUrl,
+          description: posting.description ?? existing.description,
+          country: posting.country ?? existing.country,
           lastSeenAt: posting.lastSeenAt,
           rawPayload: JSON.stringify(posting.rawPayload),
           // firstSeenAt is deliberately absent from this SET clause.

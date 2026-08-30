@@ -1175,6 +1175,25 @@ export async function executeDeliver(
   // postings and died on the 30th.
   let filteredCount = 0;
   let scoredCount = 0;
+  /**
+   * How many postings the international budget (ADR-068) held back this run.
+   *
+   * Subtracted below, because `filteredCount` is `ranked.length` — everything
+   * that passed the pre-filter, deliberately including what the budget then
+   * deferred (see its own comment). Without this term, a perfectly healthy
+   * run that deferred anything at all reported
+   * `not_attempted_after_run_failure: <deferred>` on a `success` row: a
+   * failure counter, on a run that did not fail, for postings that were
+   * deliberately postponed and already have their own `deferred`
+   * posting_event naming `international_budget_exhausted`.
+   *
+   * Latent so far, not observed: `maxInternationalPerRun` has never actually
+   * bitten on production (zero `deferred` events on record as of
+   * 2026-08-29), which is why every historical run's arithmetic still comes
+   * out to zero. It would have fired the first time a foreign posting
+   * arrived.
+   */
+  let deferredCount = 0;
   let batchFatalReason: string | undefined;
   let cancelRequested = false;
   const scoreFailureCounts: Record<string, number> = {};
@@ -1185,7 +1204,8 @@ export async function executeDeliver(
       (sum, count) => sum + count,
       0,
     );
-    const notAttempted = filteredCount - scoredCount - recordedFailures;
+    const notAttempted =
+      filteredCount - deferredCount - scoredCount - recordedFailures;
     if (notAttempted > 0) {
       counts.not_attempted_after_run_failure = notAttempted;
     }
@@ -1330,6 +1350,7 @@ export async function executeDeliver(
         ? []
         : international.slice(internationalBudget);
 
+    deferredCount = deferredInternational.length;
     for (const posting of deferredInternational) {
       // Recorded, not silently dropped. A deferred posting keeps its
       // `notifiedAt` null and has its claim released with every other
