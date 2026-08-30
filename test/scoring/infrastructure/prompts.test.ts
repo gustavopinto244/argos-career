@@ -295,3 +295,30 @@ describe("verifyPromptTemplates", () => {
     }
   });
 });
+
+describe("posting text cannot corrupt the prompt through $ substitution patterns", () => {
+  // String.replaceAll interprets $&, $`, $' and $1 in the REPLACEMENT as
+  // substitution patterns — and the replacements here are raw posting text
+  // (POSTING_TITLE / POSTING_DESCRIPTION) and model output derived from it
+  // (REQUIREMENT_TEXT). A posting containing $' spliced the rest of the
+  // template back in after the placeholder, duplicating the prompt's own
+  // instruction block; $& re-inserted the {{PLACEHOLDER}} literal, leaving
+  // an unsubstituted token in the rendered prompt.
+  it.each(["$'", "$`", "$&", "$1", "R$'000 por mês"])(
+    "renders a title containing %s literally",
+    (title) => {
+      const prompt = buildStageAPrompt(title, null);
+      expect(prompt).toContain(title);
+      expect(prompt).not.toContain("{{POSTING_TITLE}}");
+    },
+  );
+
+  it("does not duplicate the template when the description contains $'", () => {
+    const clean = buildStageAPrompt("Estágio em Backend", "descricao normal");
+    const hostile = buildStageAPrompt("Estágio em Backend", "antes $' depois");
+    // The only difference should be the description itself, not a template
+    // block appearing twice.
+    expect(hostile.length - clean.length).toBeLessThan(40);
+    expect(hostile).toContain("antes $' depois");
+  });
+});

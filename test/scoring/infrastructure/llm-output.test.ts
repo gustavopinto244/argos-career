@@ -197,3 +197,35 @@ describe("parseModelOutputWithRetries — exhausted retries, never throws", () =
     expect(ask).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("normalizeModelOutput picks the delimiter that actually parses", () => {
+  it("finds JSON preceded by prose containing a bracket", () => {
+    // A real Stage A shape. Taking the earliest delimiter unconditionally
+    // sliced from the `[` in the prose, producing text that could never
+    // parse — and each occurrence burned the whole 3-attempt repair budget
+    // before landing the posting in the review section as invalid_output.
+    const raw =
+      'Analisando os requisitos [ver lista], segue o JSON:\n{"requirements":[{"text":"a"}]}';
+    expect(normalizeModelOutput(raw)).toBe('{"requirements":[{"text":"a"}]}');
+  });
+
+  it("finds JSON preceded by prose containing a brace", () => {
+    const raw = 'Formato {chave: valor}. Resposta:\n[{"text":"a"}]';
+    expect(normalizeModelOutput(raw)).toBe('[{"text":"a"}]');
+  });
+
+  it("still returns a genuine top-level array unchanged", () => {
+    expect(normalizeModelOutput('[{"a":1}]')).toBe('[{"a":1}]');
+    expect(normalizeModelOutput("Segue: [1,2,3]")).toBe("[1,2,3]");
+  });
+
+  it("still strips fences around a plain object", () => {
+    expect(normalizeModelOutput('```json\n{"a":1}\n```')).toBe('{"a":1}');
+  });
+
+  it("falls back to the first candidate when neither parses", () => {
+    // Unchanged behaviour: let JSON.parse fail downstream, where the failure
+    // is classified and retried.
+    expect(normalizeModelOutput("{nao e json")).toBe("{nao e json");
+  });
+});

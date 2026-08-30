@@ -32,14 +32,25 @@ const BLOCK_CLOSE = /<\/(p|div|h[1-6]|li|ul|ol|tr|table|blockquote)>/gi;
 const ANY_TAG = /<\/?[a-zA-Z][^>]*>/g;
 const HAS_MARKUP = /<[a-zA-Z/][^>]*>/;
 
-const NAMED_ENTITIES: Readonly<Record<string, string>> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-};
+/**
+ * A `Map`, not an object literal, because the lookup key comes from
+ * untrusted posting HTML. `ENTITY_PATTERN` matches `[a-zA-Z]+`, which
+ * includes every `Object.prototype` member name, and a plain object resolves
+ * those through the prototype chain: `NAMED_ENTITIES["constructor"]` returned
+ * the `Object` function, and `?? match` treated it as a hit. A posting
+ * containing `&constructor;` had `function Object() { [native code] }`
+ * spliced into its description — and from there into the Stage A prompt, the
+ * `contentHash` that keys the extraction cache, and the `inputTruncated`
+ * accounting. Same for `&toString;`, `&valueOf;`, `&hasOwnProperty;`.
+ */
+const NAMED_ENTITIES: ReadonlyMap<string, string> = new Map([
+  ["amp", "&"],
+  ["lt", "<"],
+  ["gt", ">"],
+  ["quot", '"'],
+  ["apos", "'"],
+  ["nbsp", " "],
+]);
 
 const ENTITY_PATTERN = /&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);/g;
 
@@ -56,14 +67,19 @@ function decodeEntities(input: string): string {
       // must degrade to the Unicode replacement character rather than abort
       // the whole score-and-deliver run. Surrogate code points are not valid
       // Unicode scalar values either, even though JS accepts them here.
+      // U+0000 is excluded on top of the scalar-value rules: a null byte is
+      // the field separator `hashExtractionInput` relies on, whose own
+      // comment states it is "never legitimately present in posting text".
+      // Decoding `&#0;` made that false, so a posting could carry a byte the
+      // extraction-cache key treats as structural.
       const isUnicodeScalar =
         Number.isFinite(codePoint) &&
-        codePoint >= 0 &&
+        codePoint > 0 &&
         codePoint <= 0x10ffff &&
         !(codePoint >= 0xd800 && codePoint <= 0xdfff);
       return isUnicodeScalar ? String.fromCodePoint(codePoint) : "\uFFFD";
     }
-    return NAMED_ENTITIES[code] ?? match;
+    return NAMED_ENTITIES.get(code) ?? match;
   });
 }
 

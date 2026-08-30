@@ -396,3 +396,72 @@ describe("isKnownProfileEvidence — academic and declared-field evidence (docs/
     );
   });
 });
+
+describe("isEvidenceApplicableToRequirement strips both sides of the comparison", () => {
+  // `buildProfileEvidenceIndex` keys the catalog on stripEvidenceTag(text),
+  // but this function compared the RAW catalog text against the stripped
+  // quote. A profile.yaml evidence line that itself opens with `- ` or
+  // `[Something] ` therefore passed isKnownProfileEvidence and could never be
+  // found here — so every match quoting it was coerced to not_met: real,
+  // quoted, and rejected 100% of the time, the exact failure ADR-058
+  // documents.
+  const quoted = "[Projeto] Construiu uma API REST em Node.js.";
+  const taggedProfile = profile({
+    competencies: [
+      {
+        name: "Node.js",
+        tracks: ["dev"],
+        aliases: [],
+        evidence: [quoted],
+      },
+    ],
+  });
+  const requirement = {
+    text: "Node.js obrigatório",
+    category: "language",
+    weight: "mandatory",
+    verifiable: true,
+  } as const;
+
+  it("accepts evidence whose own text carries a tag-like prefix", () => {
+    expect(isKnownProfileEvidence(quoted, taggedProfile)).toBe(true);
+    expect(
+      isEvidenceApplicableToRequirement(quoted, requirement, taggedProfile),
+    ).toBe(true);
+  });
+});
+
+describe("a competency named after an Object.prototype member cannot crash the run", () => {
+  // `entry.tag` is a competency.name straight from profile.yaml, and
+  // FIXED_TAG_TERMS was indexed bare — so these names resolved through the
+  // prototype chain and returned a function, which is truthy, and then
+  // `.some(...)` threw a TypeError that escaped StageBMatcher.match and
+  // aborted the whole scoring run.
+  it.each(["constructor", "toString", "valueOf", "hasOwnProperty"])(
+    "handles a competency named %s without throwing",
+    (name) => {
+      const quoted = `Fez algo relevante com ${name}.`;
+      const hostile = profile({
+        competencies: [
+          { name, tracks: ["dev"], aliases: [], evidence: [quoted] },
+        ],
+        resumeVariants: [
+          { id: "backend", tracks: ["dev"], competencyNames: [name] },
+        ],
+      });
+      const requirement = {
+        text: `${name} obrigatório`,
+        category: "language",
+        weight: "mandatory",
+        verifiable: true,
+      } as const;
+
+      expect(() =>
+        isEvidenceApplicableToRequirement(quoted, requirement, hostile),
+      ).not.toThrow();
+      expect(
+        isEvidenceApplicableToRequirement(quoted, requirement, hostile),
+      ).toBe(true);
+    },
+  );
+});

@@ -213,15 +213,30 @@ export function isEvidenceApplicableToRequirement(
   today: Date = new Date(),
 ): boolean {
   const quote = stripEvidenceTag(evidence);
+  // Both sides stripped, matching how `buildProfileEvidenceIndex` keys the
+  // same catalog. Comparing the *raw* `candidate.text` here meant a
+  // profile.yaml evidence line that itself opens with `- ` or `[Something] `
+  // passed `isKnownProfileEvidence` (which strips) and could never be found
+  // here (which did not) — so every match quoting it was coerced to
+  // `not_met`: real, quoted, and rejected 100% of the time, the exact
+  // failure mode ADR-058 documents.
   const entry = buildEvidenceCatalog(profile, today).find(
-    (candidate) => candidate.text === quote,
+    (candidate) => stripEvidenceTag(candidate.text) === quote,
   );
   if (!entry) return false;
 
   const requirementText = normalizedWords(
     `${requirement.text} ${requirement.category}`,
   );
-  const fixedTerms = FIXED_TAG_TERMS[entry.tag];
+  // `Object.hasOwn`, not a bare index: `entry.tag` is a `competency.name`
+  // straight from profile.yaml, so a competency named `constructor`,
+  // `toString` or `valueOf` resolved through `Object.prototype` and returned
+  // a function — truthy, and then `.some(...)` throws a TypeError that
+  // escapes `StageBMatcher.match` and aborts the run. `GENERIC_SKILL_TERMS`
+  // below is already written defensively; this was not.
+  const fixedTerms = Object.hasOwn(FIXED_TAG_TERMS, entry.tag)
+    ? FIXED_TAG_TERMS[entry.tag]
+    : undefined;
   if (fixedTerms) {
     return fixedTerms.some((term) => includesTerm(requirementText, term));
   }

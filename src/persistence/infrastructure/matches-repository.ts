@@ -85,6 +85,49 @@ export class MatchesRepository {
         })
         .run();
     }
+
+    // Publishing the complete cache retires the per-requirement checkpoints
+    // it was assembled from: they exist only to let a failed run resume, and
+    // once every position is present here they can never be read again
+    // (`findPartial` is only consulted after `find` misses, and `find` now
+    // hits for this exact key).
+    //
+    // Without this they accumulated forever — ~25 rows per scored posting,
+    // and a new `profileHash`, `promptVersion`, `model` or `requirementsHash`
+    // starts a fresh generation without retiring the old one. Measured on
+    // production before the fix: 571 of 585 partial rows (98%) were already
+    // superseded by a complete row, and every nightly `VACUUM INTO` backup
+    // copied all of them.
+    this.deletePartial(
+      fingerprint,
+      profileHash,
+      promptVersion,
+      model,
+      requirementsHash,
+    );
+  }
+
+  /** Drops the resume checkpoints for one cache key. Safe to call when none
+   * exist. */
+  deletePartial(
+    fingerprint: string,
+    profileHash: string,
+    promptVersion: string,
+    model: string,
+    requirementsHash: string,
+  ): void {
+    this.db
+      .delete(partialMatches)
+      .where(
+        and(
+          eq(partialMatches.fingerprint, fingerprint),
+          eq(partialMatches.profileHash, profileHash),
+          eq(partialMatches.promptVersion, promptVersion),
+          eq(partialMatches.model, model),
+          eq(partialMatches.requirementsHash, requirementsHash),
+        ),
+      )
+      .run();
   }
 
   find(
