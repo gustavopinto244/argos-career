@@ -5,6 +5,7 @@ import {
   CollectorPort,
 } from "../domain/ports/collector.port";
 import { RawPosting } from "../domain/raw-posting";
+import { FetchedBody, fetchWithDeadline } from "./fetch-with-deadline";
 import {
   CieeResponseEnvelopeSchema,
   CieeVaga,
@@ -178,7 +179,7 @@ export class CieeCollector implements CollectorPort {
       while (scanned < maxResults) {
         if (page > 0) await sleep(this.requestIntervalMs);
 
-        const response = await this.fetchWithBackoff(buildUrl(page, pageSize));
+        const response = await this.fetchPage(buildUrl(page, pageSize));
         if (!response.ok) {
           return {
             source: SOURCE,
@@ -195,7 +196,7 @@ export class CieeCollector implements CollectorPort {
 
         let body: unknown;
         try {
-          body = await response.json();
+          body = JSON.parse(response.body) as unknown;
         } catch (cause) {
           return {
             source: SOURCE,
@@ -296,29 +297,16 @@ export class CieeCollector implements CollectorPort {
   /** Timeout per request, exponential backoff across attempts, and only
    * 5xx/network failures retried — a 4xx means the request is wrong and
    * retrying wastes the source's time (CLAUDE.md §6). */
-  private async fetchWithBackoff(url: string): Promise<Response> {
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= this.backoffDelaysMs.length; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      try {
-        const response = await this.fetchImpl(url, {
-          headers: { "User-Agent": USER_AGENT },
-          signal: controller.signal,
-        });
-        if (response.ok || response.status < 500) return response;
-        lastError = new Error(`CIEE responded ${response.status}`);
-      } catch (error) {
-        lastError = error;
-      } finally {
-        clearTimeout(timer);
-      }
-
-      const delay = this.backoffDelaysMs[attempt];
-      if (delay !== undefined) await sleep(delay);
-    }
-
-    throw lastError;
+  /** Delegates to the shared `fetchWithDeadline` (`fetch-with-deadline.ts`),
+   * which holds the timeout across the body read and bounds its size. This
+   * collector used to carry its own copy that did neither. */
+  private fetchPage(url: string): Promise<FetchedBody> {
+    return fetchWithDeadline(url, {
+      fetchImpl: this.fetchImpl,
+      timeoutMs: this.timeoutMs,
+      backoffDelaysMs: this.backoffDelaysMs,
+      userAgent: USER_AGENT,
+      source: "CIEE",
+    });
   }
 }

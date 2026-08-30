@@ -4,6 +4,7 @@ import {
   CollectorPort,
 } from "../domain/ports/collector.port";
 import { RawPosting } from "../domain/raw-posting";
+import { FetchedBody, fetchWithDeadline } from "./fetch-with-deadline";
 import { InfoJobsJobSchema } from "./infojobs-schema";
 import { parseInfoJobsListing } from "./infojobs-listing-parser";
 
@@ -192,7 +193,7 @@ export class InfoJobsCollector implements CollectorPort {
     let listingHtml: string;
     try {
       const listingUrl = buildListingUrl(criteria);
-      const response = await this.fetchWithBackoff(listingUrl);
+      const response = await this.fetchPage(listingUrl);
       if (!response.ok) {
         return {
           source: SOURCE,
@@ -203,7 +204,7 @@ export class InfoJobsCollector implements CollectorPort {
           },
         };
       }
-      listingHtml = await response.text();
+      listingHtml = response.body;
     } catch (cause) {
       const detail = cause instanceof Error ? cause.message : String(cause);
       return {
@@ -226,18 +227,18 @@ export class InfoJobsCollector implements CollectorPort {
       const detailUrl = new URL(card.href, BASE_URL).toString();
       try {
         // One posting's detail page failing — a non-ok response, a
-        // timeout, or `fetchWithBackoff` exhausting its own retries — is a
+        // timeout, or `fetchPage` exhausting its own retries — is a
         // per-item loss (principle 1), not a whole-collection failure: the
         // listing itself already succeeded, and every other card is
         // independent. Scoped to just this card's fetch/parse so a thrown
         // error here (unlike a non-ok response, which returns normally)
         // cannot abort the rest of the loop.
-        const response = await this.fetchWithBackoff(detailUrl);
+        const response = await this.fetchPage(detailUrl);
         if (!response.ok) {
           schemaRejectedCount += 1;
           continue;
         }
-        const detailHtml = await response.text();
+        const detailHtml = response.body;
         const jsonLd = extractJobPostingJsonLd(detailHtml);
         if (!jsonLd || typeof jsonLd !== "object") {
           schemaRejectedCount += 1;
@@ -293,29 +294,16 @@ export class InfoJobsCollector implements CollectorPort {
    * means the request itself is wrong, and retrying it wastes the source's
    * time for no different outcome (collector etiquette, CLAUDE.md §6).
    */
-  private async fetchWithBackoff(url: string): Promise<Response> {
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= this.backoffDelaysMs.length; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      try {
-        const response = await this.fetchImpl(url, {
-          headers: { "User-Agent": USER_AGENT },
-          signal: controller.signal,
-        });
-        if (response.ok || response.status < 500) return response;
-        lastError = new Error(`InfoJobs responded ${response.status}`);
-      } catch (error) {
-        lastError = error;
-      } finally {
-        clearTimeout(timer);
-      }
-
-      const delay = this.backoffDelaysMs[attempt];
-      if (delay !== undefined) await sleep(delay);
-    }
-
-    throw lastError;
+  /** Delegates to the shared `fetchWithDeadline` (`fetch-with-deadline.ts`),
+   * which holds the timeout across the body read and bounds its size. This
+   * collector used to carry its own copy that did neither. */
+  private fetchPage(url: string): Promise<FetchedBody> {
+    return fetchWithDeadline(url, {
+      fetchImpl: this.fetchImpl,
+      timeoutMs: this.timeoutMs,
+      backoffDelaysMs: this.backoffDelaysMs,
+      userAgent: USER_AGENT,
+      source: "InfoJobs",
+    });
   }
 }
