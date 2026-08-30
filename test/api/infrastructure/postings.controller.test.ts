@@ -194,3 +194,73 @@ describe("POST/DELETE /postings/:fingerprint/applied (ADR-072)", () => {
     ).expect(404);
   });
 });
+
+describe("POST/GET /postings/:fingerprint/application-events (ADR-075)", () => {
+  it("requires authentication", async () => {
+    await request(app.getHttpServer())
+      .post(`/postings/${seedPosting()}/application-events`)
+      .expect(401);
+  });
+
+  it("records an event and reads it back, most recent first", async () => {
+    const fingerprint = seedPosting();
+
+    const recorded = await auth(
+      request(app.getHttpServer()).post(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    )
+      .send({ kind: "response_received", note: "resposta por e-mail" })
+      .expect(201);
+    expect(recorded.body).toEqual({ fingerprint, kind: "response_received" });
+
+    await auth(
+      request(app.getHttpServer()).post(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    )
+      .send({ kind: "interview_scheduled" })
+      .expect(201);
+
+    const listed = await auth(
+      request(app.getHttpServer()).get(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    ).expect(200);
+    expect(listed.body.fingerprint).toBe(fingerprint);
+    expect(
+      (listed.body.events as { kind: string }[]).map((e) => e.kind),
+    ).toEqual(["interview_scheduled", "response_received"]);
+  });
+
+  it("returns 404 for a fingerprint that does not exist", async () => {
+    await auth(
+      request(app.getHttpServer()).post(
+        "/postings/no-such-fingerprint/application-events",
+      ),
+    )
+      .send({ kind: "rejected" })
+      .expect(404);
+  });
+
+  it("rejects an unrecognized kind", async () => {
+    const fingerprint = seedPosting();
+    await auth(
+      request(app.getHttpServer()).post(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    )
+      .send({ kind: "applied" })
+      .expect(500);
+  });
+
+  it("reads an empty history for a posting with no events, without erroring", async () => {
+    const fingerprint = seedPosting();
+    const listed = await auth(
+      request(app.getHttpServer()).get(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    ).expect(200);
+    expect(listed.body).toEqual({ fingerprint, events: [] });
+  });
+});

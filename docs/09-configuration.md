@@ -36,6 +36,7 @@ DATABASE_PATH=            # default ./data/argos.db
 API_ADMIN_KEY=            # required — full-access Bearer credential (ADR-047)
 API_KEY=                  # deprecated fallback for API_ADMIN_KEY during migration only
 API_AUTOMATION_KEY=       # optional — operational REST/MCP caller, no ingest/discard
+API_FEEDBACK_KEY=         # optional — Hermes reporting application feedback (ADR-075), MCP-only
 INGEST_CATHO_API_KEY=     # optional — external ingest for source=catho only
 INGEST_INDEED_API_KEY=    # optional — external ingest for source=indeed only
 INGEST_LINKEDIN_API_KEY=  # optional — external ingest for source=linkedin only
@@ -56,13 +57,14 @@ Every configured value must be unique. `ApiKeyGuard` refuses to start when two
 principals share a credential, preventing an apparently source-scoped key from
 silently inheriting a broader role.
 
-| Credential                | Allowed capabilities                                                         |
-| ------------------------- | ---------------------------------------------------------------------------- |
-| `API_ADMIN_KEY`           | Every REST route and MCP tool, including permanent discard                   |
-| `API_AUTOMATION_KEY`      | Reads, collect, dedup, deliver and study plan; no external ingest or discard |
-| `INGEST_CATHO_API_KEY`    | Only `POST /runs/collect/external` with `source: "catho"`                    |
-| `INGEST_INDEED_API_KEY`   | Only `POST /runs/collect/external` with `source: "indeed"`                   |
-| `INGEST_LINKEDIN_API_KEY` | Only `POST /runs/collect/external` with `source: "linkedin"`                 |
+| Credential                | Allowed capabilities                                                                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_ADMIN_KEY`           | Every REST route and MCP tool, including permanent discard                                                                                                                                        |
+| `API_AUTOMATION_KEY`      | Reads, collect, dedup, deliver and study plan; no external ingest or discard                                                                                                                      |
+| `API_FEEDBACK_KEY`        | `POST /mcp` only — `list_postings`, `mark_applied`/`unmark_applied`, `record_application_event`/`list_application_events` (ADR-075); never `discard_posting` or any `run_*`/`get_study_plan` tool |
+| `INGEST_CATHO_API_KEY`    | Only `POST /runs/collect/external` with `source: "catho"`                                                                                                                                         |
+| `INGEST_INDEED_API_KEY`   | Only `POST /runs/collect/external` with `source: "indeed"`                                                                                                                                        |
+| `INGEST_LINKEDIN_API_KEY` | Only `POST /runs/collect/external` with `source: "linkedin"`                                                                                                                                      |
 
 Rotation is coordinated because the process accepts one current value per
 principal: pause that caller's timer/workflow, generate a new value, update the

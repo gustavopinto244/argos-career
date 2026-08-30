@@ -13,6 +13,7 @@ import {
   taxonomyProvider,
 } from "./config.provider";
 import { databaseProvider } from "./database.provider";
+import { FeedbackService } from "./feedback.service";
 import { MarketController } from "./market.controller";
 import { MarketService } from "./market.service";
 import { McpController } from "./mcp.controller";
@@ -77,6 +78,7 @@ import { runLockProvider } from "../../scheduling/infrastructure/run-lock.provid
     RunsService,
     MarketService,
     PostingsService,
+    FeedbackService,
     runLockProvider,
     { provide: APP_GUARD, useClass: ApiKeyGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },

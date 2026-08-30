@@ -229,11 +229,16 @@ point with an explanation rather than an absence.
 
 Recorded so their absence is a decision rather than an oversight:
 
-- **Application outcome.** A manual, reversible "applied" bookmark exists
-  (`postings.appliedAt`, ADR-072) so `list_postings` can filter on it for
-  Hermes-driven analysis — but nothing tracks what happened after: no
-  outcome, no recruiter response. That fuller feedback loop is still Phase 2
-  and still keeps the non-goal of automatic application at arm's length.
+- **Application outcome — partially modelled since ADR-075.** A manual,
+  reversible "applied" bookmark exists (`postings.appliedAt`, ADR-072) so
+  `list_postings` can filter on it. Phase 2's first slice (ADR-075) adds
+  `application_events`, an append-only timeline of what happens _after_
+  applying — a response, an interview, an outcome — recorded by the operator
+  or by Hermes (which reads its own Gmail entirely outside this codebase;
+  nothing here ever touches email). Still explicitly not modelled: any
+  automatic action taken from a response (the non-goal of automatic
+  application stays at arm's length), and any recalibration of scoring from
+  outcome history — there is no real data yet to calibrate against.
 - **Company as an entity.** Company is a normalized string. Modelling companies
   properly implies deduplicating company names, which is a harder problem than
   the one being solved.

@@ -14,6 +14,10 @@ export type AuthPrincipal =
       readonly id: string;
       readonly kind: "source-ingest";
       readonly source: string;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "feedback";
     };
 
 export type AuthenticatedRequest = Request & {
