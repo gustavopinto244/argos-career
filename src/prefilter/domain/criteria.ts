@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ProfileTrackSchema } from "../../profile/domain/profile";
 
-export const LocationCriteriaSchema = z.object({
+export const LocationCriteriaSchema = z.strictObject({
   /** Case-insensitive city names the location rule accepts. */
   cities: z.array(z.string().min(1)).default([]),
   allowRemote: z.boolean().default(true),
@@ -30,7 +30,7 @@ export const LocationCriteriaSchema = z.object({
  * `trackWeights` — that lives at the top level of `Criteria` already, shared
  * with the pre-filter's track classification rather than duplicated here).
  */
-export const ScoringConfigSchema = z.object({
+export const ScoringConfigSchema = z.strictObject({
   /**
    * Must sum to 100 (docs/audit AC-025) — `computeScore`'s formula
    * (`docs/04-scoring-model.md`) is `weights.mandatory * mandatoryCoverage +
@@ -130,7 +130,7 @@ export const ScoringConfigSchema = z.object({
  * `GupyCollectorCriteria` that is a *search decision* rather than a
  * transport detail — `pageSize`, timeouts and backoff stay in the adapter.
  */
-export const CollectionQuerySchema = z.object({
+export const CollectionQuerySchema = z.strictObject({
   /**
    * Which collector answers this query (`src/posting/infrastructure/
    * collector-registry.ts`). Defaults to `gupy` so a criteria file written
@@ -170,7 +170,7 @@ export const CollectionQuerySchema = z.object({
  * section existed stays valid and behaves exactly as it did — same
  * discipline as `trackExclusions`, `schedule` and `alerts`.
  */
-export const CollectionSchema = z.object({
+export const CollectionSchema = z.strictObject({
   queries: z.array(CollectionQuerySchema).min(1),
   /**
    * Pause between consecutive queries in one cycle. The collector's own
@@ -210,8 +210,16 @@ export const CollectionSchema = z.object({
  * would classify every one of its postings as `unknown`, which is exactly
  * the kind of empty-filter-that-silently-passes-everything principle 3
  * warns against.
+ *
+ * **Strict on purpose.** A plain `z.object` strips unrecognized keys without
+ * a word, and every rule in this file has a permissive default — so a typo
+ * (`maxAgeDay`, `stillListedWithinHour`, `rejectUnknownTracks`) validates
+ * cleanly and silently turns its rule *off*. The failure is invisible in
+ * exactly the way principle 3 exists to prevent: the config still says what
+ * you meant, and the filter no longer does it. `CollectionQuerySchema`'s own
+ * comment already records this class of mistake landing once.
  */
-export const CriteriaSchema = z.object({
+export const CriteriaSchema = z.strictObject({
   collection: CollectionSchema.default({
     queries: [{ source: "gupy" }],
     queryIntervalMs: 1_500,
@@ -383,7 +391,7 @@ export const CriteriaSchema = z.object({
    * weight outside [0, 1] would let this one term alone push the score
    * above 100 or below 0 regardless of every other term.
    */
-  trackWeights: z.object({
+  trackWeights: z.strictObject({
     dev: z.number().min(0).max(1),
     security: z.number().min(0).max(1),
     automation: z.number().min(0).max(1),

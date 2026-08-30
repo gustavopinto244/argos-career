@@ -170,6 +170,42 @@ describe("applyPreFilter — expired", () => {
     expect(outcome.passed).toBe(true);
   });
 
+  it("keeps a date-only deadline open through its own last day", () => {
+    // Sources state these as a bare date (Gupy sends "2026-08-26"), which
+    // parses to UTC midnight — 21:00 the previous day in São Paulo. Compared
+    // as a raw instant, the posting was already "expired" when the 03:00
+    // nightly run of its final valid day looked at it, so it lost a whole
+    // day of applications. NOW here is 03:00Z on the deadline date itself.
+    const outcome = applyPreFilter(
+      posting({ applicationDeadline: new Date("2026-08-14T00:00:00Z") }),
+      baseCriteria(),
+      [],
+      NOW,
+    );
+    expect(outcome.passed).toBe(true);
+  });
+
+  it("expires a date-only deadline once its day has fully passed", () => {
+    const outcome = applyPreFilter(
+      posting({ applicationDeadline: new Date("2026-08-13T00:00:00Z") }),
+      baseCriteria(),
+      [],
+      NOW,
+    );
+    expect(outcome.reason).toBe("expired");
+  });
+
+  it("leaves a deadline carrying a real time-of-day alone", () => {
+    // Not a date — a genuine instant, and one already past.
+    const outcome = applyPreFilter(
+      posting({ applicationDeadline: new Date("2026-08-14T01:00:00Z") }),
+      baseCriteria(),
+      [],
+      NOW,
+    );
+    expect(outcome.reason).toBe("expired");
+  });
+
   it("does not reject a posting with no stated deadline — unknown, not expired", () => {
     const outcome = applyPreFilter(
       posting({ applicationDeadline: null }),
@@ -963,5 +999,49 @@ describe("applyPreFilter — ordering", () => {
       NOW,
     );
     expect(outcome.reason).toBe("location_not_allowed");
+  });
+});
+
+describe("applyPreFilter — keyword adherence matches whole words, not substrings", () => {
+  // The old comment claimed no profile keyword collided with an ordinary
+  // Portuguese word. Measured on the real corpus that was false in exactly
+  // the way ADR-011 Amendment 1's identical claim was: as a substring `ci`
+  // matched 270 titles ("especial", "social", "farmácia") against 0 as a
+  // whole word. Since `minKeywordAdherence` ships at 0, the rule had never
+  // run against production data — so turning the knob on would have made a
+  // filter that filters nothing.
+  it.each([
+    ["Estágio em Atendimento Especial", "ci"],
+    ["Estágio em Mídias Sociais", "ci"],
+    ["Estágio em Farmácia", "ci"],
+    ["Estágio em Publicidade", "cd"],
+  ])("does not count %s as containing the keyword %s", (title, keyword) => {
+    const outcome = applyPreFilter(
+      posting({ title }),
+      baseCriteria({ minKeywordAdherence: 1, titleRequired: ["estágio"] }),
+      [keyword],
+      NOW,
+    );
+    expect(outcome.reason).toBe("insufficient_keyword_adherence");
+  });
+
+  it("counts the keyword when it is genuinely its own word", () => {
+    const outcome = applyPreFilter(
+      posting({ title: "Estágio em CI e testes" }),
+      baseCriteria({ minKeywordAdherence: 1, titleRequired: ["estágio"] }),
+      ["ci"],
+      NOW,
+    );
+    expect(outcome.passed).toBe(true);
+  });
+
+  it("still handles the punctuation variants the old substring pass covered", () => {
+    const outcome = applyPreFilter(
+      posting({ title: "Estágio Back-End" }),
+      baseCriteria({ minKeywordAdherence: 1, titleRequired: ["estágio"] }),
+      ["backend"],
+      NOW,
+    );
+    expect(outcome.passed).toBe(true);
   });
 });

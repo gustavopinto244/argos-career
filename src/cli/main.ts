@@ -1314,7 +1314,11 @@ export async function executeDeliver(
     // run ends early (a provider outage, a cancel), what the budget already
     // bought was spent on the freshest, best-matched postings rather than on
     // whatever order SQLite happened to return.
-    const ranked = rankForScoring(filtered, criteria);
+    // `startedAt`, the same clock `applyPreFilter` was just given: both read
+    // `stillListedWithinHours` against "now", and a run whose two halves
+    // disagreed about when now is could rescue a posting from the age rule
+    // and then rank it as though it were stale.
+    const ranked = rankForScoring(filtered, criteria, startedAt);
     const { national, international } = partitionByOrigin(ranked, criteria);
     const internationalBudget = criteria.maxInternationalPerRun;
     const admittedInternational =

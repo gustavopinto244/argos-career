@@ -1,6 +1,30 @@
-import { normalize } from "../../posting/domain/fingerprint";
 const COMBINING_MARKS = /[\u0300-\u036f]/g;
 const NON_ALPHANUMERIC = /[^\p{L}\p{N}]+/gu;
+
+/**
+ * Punctuation that *joins* one term rather than separating two, so collapsing
+ * it is what produces the real word: `Node.js` \u2192 `nodejs`, `back-end` \u2192
+ * `backend`, `C++` \u2192 `c`. Everything else non-alphanumeric separates.
+ *
+ * This distinction exists because deleting *all* punctuation is wrong in one
+ * direction and keeping it all is wrong in the other, and the two failures
+ * are real, not hypothetical:
+ *
+ * - Delete everything (the original behaviour): `TI/Seguran\u00e7a` becomes the
+ *   single token `tiseguranca`, so the keyword `seguran\u00e7a` does not match and
+ *   a genuine security posting loses its track \u2014 with `rejectUnknownTrack`
+ *   on, it is discarded as `track_unknown` before any LLM sees it.
+ * - Split on everything: `Node.js` becomes `node js`, so the alias `js`
+ *   matches it and a Node.js requirement is counted as a separate JavaScript
+ *   mention in M10's aggregates \u2014 the exact regression the collapsed-only
+ *   path was introduced to stop.
+ *
+ * `/` is a separator on purpose: in these titles it reads as "or" \u2014
+ * `TI/Seguran\u00e7a`, `Desenvolvimento/Automa\u00e7\u00e3o`. The multi-token keyword
+ * `ci/cd` is unaffected, since it normalizes to the phrase `ci cd` and
+ * matches through the spaced pass either way.
+ */
+const JOINING_PUNCTUATION = /['`\u00b4.\-_+#]+/g;
 
 /**
  * Title-matching normalization, deliberately **not** `normalize` from
@@ -18,6 +42,24 @@ export function normalizeTitle(value: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(COMBINING_MARKS, "")
+    .replace(NON_ALPHANUMERIC, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The middle ground between `normalizeTitle` (all punctuation separates) and
+ * `normalize` (all punctuation vanishes): joining punctuation is deleted so
+ * the term collapses into one word, and everything else becomes a space so
+ * word boundaries survive. See `JOINING_PUNCTUATION` for why neither extreme
+ * is correct on its own.
+ */
+export function normalizeCollapsingJoiners(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(COMBINING_MARKS, "")
+    .replace(JOINING_PUNCTUATION, "")
     .replace(NON_ALPHANUMERIC, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -84,10 +126,9 @@ export function titleMatchesAny(
  *
  * 1. **Word/phrase**, over punctuation-as-space text — `back-end` becomes
  *    the phrase "back end" and matches "Back-End Developer".
- * 2. **Collapsed word**, over punctuation-deleted text (`normalize`, which
- *    keeps spaces) — `back-end` collapses to "backend" and matches
- *    "Backend Developer", the hyphen-insensitivity the old substring
- *    matching existed to provide.
+ * 2. **Collapsed word**, over `normalizeCollapsingJoiners` text — `back-end`
+ *    collapses to "backend" and matches "Backend Developer", the
+ *    hyphen-insensitivity the old substring matching existed to provide.
  *
  * Neither pass can match `api` inside `fisioterapia`, because in both the
  * candidate must occupy a whole word.
@@ -101,11 +142,15 @@ export function keywordMatchesText(text: string, keyword: string): boolean {
   // the two tokens "node" and "js" — and a bare single-token keyword would
   // then match a fragment of an unrelated term: the alias `JS` matched
   // inside "Node.js", counting a Node.js requirement as a separate
-  // JavaScript mention in the market aggregates. The collapsed pass reads
-  // "Node.js" as the single token "nodejs", where `js` correctly does not
-  // match, while "Noções de JS" still does.
-  const collapsed = ` ${normalize(text)} `;
-  const collapsedKeyword = normalize(keyword);
+  // JavaScript mention in the market aggregates.
+  //
+  // The collapsed pass deletes only *joining* punctuation, so "Node.js" is
+  // still the single token "nodejs" (where `js` correctly does not match)
+  // while "TI/Segurança" is two tokens (where `segurança` correctly does).
+  // Deleting `/` here too — the original behaviour — silently cost real
+  // security postings their track.
+  const collapsed = ` ${normalizeCollapsingJoiners(text)} `;
+  const collapsedKeyword = normalizeCollapsingJoiners(keyword);
   if (!spacedKeyword.includes(" ")) {
     return (
       collapsedKeyword !== "" && collapsed.includes(` ${collapsedKeyword} `)
