@@ -254,6 +254,49 @@ describe("POST/GET /postings/:fingerprint/application-events (ADR-075)", () => {
       .expect(500);
   });
 
+  // The REST body has no ValidationPipe behind it (src/main.ts registers
+  // none), so the domain factory is the only runtime check on this path.
+  // Before it validated occurredAt, this reached the INSERT and came back as
+  // a 500 reading `NOT NULL constraint failed: application_events.occurred_at`.
+  it("rejects an unparseable occurredAt instead of hitting the database", async () => {
+    const fingerprint = seedPosting();
+    await auth(
+      request(app.getHttpServer()).post(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    )
+      .send({ kind: "rejected", occurredAt: "garbage" })
+      .expect(500);
+
+    // The point is that nothing was written, not merely that it errored.
+    const listed = await auth(
+      request(app.getHttpServer()).get(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    ).expect(200);
+    expect(listed.body.events).toEqual([]);
+  });
+
+  it("accepts a valid ISO occurredAt and stores it verbatim", async () => {
+    const fingerprint = seedPosting();
+    await auth(
+      request(app.getHttpServer()).post(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    )
+      .send({ kind: "rejected", occurredAt: "2026-08-28T10:39:19.000Z" })
+      .expect(201);
+
+    const listed = await auth(
+      request(app.getHttpServer()).get(
+        `/postings/${fingerprint}/application-events`,
+      ),
+    ).expect(200);
+    expect(
+      (listed.body.events as { occurredAt: string }[])[0]?.occurredAt,
+    ).toBe("2026-08-28T10:39:19.000Z");
+  });
+
   it("reads an empty history for a posting with no events, without erroring", async () => {
     const fingerprint = seedPosting();
     const listed = await auth(

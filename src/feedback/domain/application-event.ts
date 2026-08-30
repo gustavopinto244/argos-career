@@ -46,18 +46,26 @@ export type CreateApplicationEventInput = {
 
 /**
  * Enforces the invariants at construction: `fingerprint`/`recordedBy`
- * non-empty, `kind` a recognized value, `note` trimmed to `null` when blank.
- * Same "domain factory rejects invalid input, ports return failure as a
- * value" split `createPosting` already draws — this is ordinary
- * validation, not a pipeline stage principle 1 requires to survive a
- * throw.
+ * non-empty, `kind` a recognized value, `occurredAt` a real date, `note`
+ * trimmed to `null` when blank. Same "domain factory rejects invalid input,
+ * ports return failure as a value" split `createPosting` already draws —
+ * this is ordinary validation, not a pipeline stage principle 1 requires to
+ * survive a throw.
+ *
+ * **This factory is the only validation the REST path gets.** The app
+ * registers no global `ValidationPipe` (`src/main.ts`), so
+ * `POST /postings/:fingerprint/application-events` hands its body through
+ * with nothing but a TypeScript type — which is erased at runtime.
+ * `record_application_event` over MCP is protected by its own Zod schema;
+ * the REST route, which exists precisely so the operator can record an
+ * outcome by hand, is not. That is exactly where a typo'd date is most
+ * likely, so the checks below are what stand between it and the database.
  */
 export function createApplicationEvent(
   input: CreateApplicationEventInput,
 ): ApplicationEvent {
   const fingerprint = input.fingerprint.trim();
   const recordedBy = input.recordedBy.trim();
-  const note = input.note?.trim();
 
   if (!fingerprint) {
     throw new Error("ApplicationEvent.fingerprint must not be empty");
@@ -68,6 +76,24 @@ export function createApplicationEvent(
   if (!APPLICATION_EVENT_KINDS.includes(input.kind)) {
     throw new Error(`ApplicationEvent.kind is not recognized: ${input.kind}`);
   }
+  // `new Date("garbage")` is a Date, so the type says nothing here. Left
+  // unchecked it reached the INSERT and surfaced as
+  // `NOT NULL constraint failed: application_events.occurred_at` — a 500
+  // naming a database column, for what is really "that is not a date".
+  if (
+    !(input.occurredAt instanceof Date) ||
+    Number.isNaN(input.occurredAt.getTime())
+  ) {
+    throw new Error("ApplicationEvent.occurredAt must be a valid date");
+  }
+  // Same erased-type problem: a REST body can carry any JSON here, and
+  // `.trim()` on a number throws a raw TypeError out of the domain layer.
+  if (input.note !== undefined && input.note !== null) {
+    if (typeof input.note !== "string") {
+      throw new Error("ApplicationEvent.note must be a string when present");
+    }
+  }
+  const note = input.note?.trim();
 
   return {
     fingerprint,

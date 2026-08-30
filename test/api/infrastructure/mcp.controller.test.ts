@@ -343,6 +343,25 @@ describe("MCP server", () => {
       },
     );
 
+    // ADR-075 Amendment 1: `note` carries a literal quote of the recruiter's
+    // email (the outcome-tracking Hermes skill writes it). `automation`
+    // exists to trigger pipeline stages, not to read correspondence — and a
+    // read should never be broader than the write for the same rows, which
+    // is already `["admin", "feedback"]`.
+    it("refuses list_application_events, which exposes quoted email text", async () => {
+      const stored = seedPosting("1", "Estágio em Backend");
+      const automation = await automationClient();
+      try {
+        const result = await automation.callTool({
+          name: "list_application_events",
+          arguments: { fingerprint: stored.fingerprint },
+        });
+        expect(result.isError).toBe(true);
+      } finally {
+        await automation.close();
+      }
+    });
+
     it("still allows the read-only tools it is entitled to", async () => {
       seedPosting("1", "Estágio em Backend");
       const automation = await automationClient();
@@ -644,6 +663,20 @@ describe("MCP server", () => {
       const repo = new ApplicationEventsRepository(db);
       const [row] = repo.findByFingerprint(posting.fingerprint);
       expect(row?.recordedBy).toMatch(/^feedback:/);
+    });
+
+    it("can call list_application_events — same scope as the write side", async () => {
+      const posting = seedPosting("1", "Estágio Backend");
+      const feedback = await feedbackClient();
+      try {
+        const result = await feedback.callTool({
+          name: "list_application_events",
+          arguments: { fingerprint: posting.fingerprint },
+        });
+        expect(result.isError).toBeFalsy();
+      } finally {
+        await feedback.close();
+      }
     });
 
     it("can call get_personal_gap_analysis (ADR-076)", async () => {
