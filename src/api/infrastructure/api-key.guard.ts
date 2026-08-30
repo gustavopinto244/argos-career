@@ -48,6 +48,19 @@ export class ApiKeyGuard implements CanActivate {
     addCredential(configured, "automation", process.env.API_AUTOMATION_KEY, {
       kind: "automation",
     });
+    // ADR-075: Hermes reporting application feedback (a response, an
+    // interview, an outcome) it read from its own Gmail access is a
+    // materially different trust level from "runs a pipeline stage" —
+    // ADR-047's own least-privilege reasoning argues against folding this
+    // into `automation`, which can spend LLM/Telegram budget and touch
+    // collection. This principal reaches only `POST /mcp`; per-tool scoping
+    // (list_postings, mark_applied/unmark_applied, the two application-event
+    // tools — never discard_posting or any run_* tool) is enforced inside
+    // `mcp.controller.ts`, the same way `automation` itself is scoped below
+    // the REST-route allowlist here.
+    addCredential(configured, "feedback", process.env.API_FEEDBACK_KEY, {
+      kind: "feedback",
+    });
     for (const source of ["catho", "indeed", "linkedin"] as const) {
       addCredential(
         configured,
@@ -106,7 +119,8 @@ function addCredential(
   principal:
     | { readonly kind: "admin" }
     | { readonly kind: "automation" }
-    | { readonly kind: "source-ingest"; readonly source: string },
+    | { readonly kind: "source-ingest"; readonly source: string }
+    | { readonly kind: "feedback" },
 ): void {
   if (!key) return;
   configured.push({
@@ -141,6 +155,18 @@ function authorizeRequest(request: Request, principal: AuthPrincipal): void {
           "/market/study-plan",
           "/mcp",
         ]).has(path));
+    if (!allowed) deny();
+    return;
+  }
+
+  if (principal.kind === "feedback") {
+    // No pipeline-triggering or spend-incurring route — everything this
+    // principal can actually do (list_postings, mark_applied/
+    // unmark_applied, record/list application events) is a Hermes tool call
+    // over MCP, scoped further per-tool inside `mcp.controller.ts`.
+    const allowed =
+      (request.method === "GET" && path === "/health") ||
+      (request.method === "POST" && path === "/mcp");
     if (!allowed) deny();
     return;
   }

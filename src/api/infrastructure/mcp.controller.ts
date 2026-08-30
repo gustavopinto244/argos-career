@@ -8,6 +8,8 @@ import {
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { APPLICATION_EVENT_KINDS } from "../../feedback/domain/application-event";
+import { FeedbackService } from "./feedback.service";
 import { MarketService } from "./market.service";
 import { PostingsService } from "./postings.service";
 import { RunsService } from "./runs.service";
@@ -63,6 +65,7 @@ export class McpController {
     private readonly runs: RunsService,
     private readonly market: MarketService,
     private readonly postings: PostingsService,
+    private readonly feedback: FeedbackService,
   ) {}
 
   @Post()
@@ -139,13 +142,28 @@ export class McpController {
           maxResults: z.number().int().positive().optional(),
         },
       },
-      (params) => safely(() => this.runs.collect(params, principal.id)),
+      (params) =>
+        safely(() => {
+          // ADR-075: `feedback` reaches `POST /mcp` (unlike `admin`/
+          // `automation`, it has no matching REST-level access to
+          // `/runs/collect`), so this tool needs its own check now — before
+          // ADR-075 every principal that could reach `/mcp` already had
+          // legitimate REST access to this same capability, so no per-tool
+          // check was needed. That invariant no longer holds once a
+          // principal exists that can reach `/mcp` without it.
+          requirePrincipalKind(principal, ["admin", "automation"]);
+          return this.runs.collect(params, principal.id);
+        }),
     );
 
     server.registerTool(
       "run_dedup",
       { description: "Re-scan the corpus for near-duplicates now." },
-      () => safely(() => this.runs.dedup(principal.id)),
+      () =>
+        safely(() => {
+          requirePrincipalKind(principal, ["admin", "automation"]);
+          return this.runs.dedup(principal.id);
+        }),
     );
 
     server.registerTool(
@@ -156,7 +174,11 @@ export class McpController {
           "SCORER_ADAPTER=stub, and sends a real Telegram message — the same " +
           "thing the nightly cron does, callable early.",
       },
-      () => safely(() => this.runs.deliver(principal.id)),
+      () =>
+        safely(() => {
+          requirePrincipalKind(principal, ["admin", "automation"]);
+          return this.runs.deliver(principal.id);
+        }),
     );
 
     server.registerTool(
@@ -171,7 +193,11 @@ export class McpController {
           kind: z.string().describe("Only 'scoreAndDeliver' is accepted."),
         },
       },
-      ({ kind }) => safely(() => this.runs.cancel(kind)),
+      ({ kind }) =>
+        safely(() => {
+          requirePrincipalKind(principal, ["admin", "automation"]);
+          return this.runs.cancel(kind);
+        }),
     );
 
     server.registerTool(
@@ -184,7 +210,11 @@ export class McpController {
           "Read-only over the corpus — never scores anything, never spends " +
           "LLM budget.",
       },
-      () => safely(() => this.market.studyPlan()),
+      () =>
+        safely(() => {
+          requirePrincipalKind(principal, ["admin", "automation"]);
+          return this.market.studyPlan();
+        }),
     );
 
     server.registerTool(
@@ -237,8 +267,10 @@ export class McpController {
           // Same reason `discard_posting` gates below: `ApiKeyGuard`
           // allowlists `POST /mcp` for an `automation` principal but not
           // `/postings/*`, so without this an automation key could mutate
-          // through MCP exactly what it is denied over REST.
-          requirePrincipalKind(principal, ["admin"]);
+          // through MCP exactly what it is denied over REST. `feedback`
+          // (ADR-075) is allowed here too — Hermes reporting "I applied"
+          // is the same trust level as it reporting a later response.
+          requirePrincipalKind(principal, ["admin", "feedback"]);
           return this.postings.markApplied(fingerprint);
         }),
     );
@@ -253,9 +285,53 @@ export class McpController {
       },
       ({ fingerprint }) =>
         safely(() => {
-          requirePrincipalKind(principal, ["admin"]);
+          requirePrincipalKind(principal, ["admin", "feedback"]);
           return this.postings.unmarkApplied(fingerprint);
         }),
+    );
+
+    server.registerTool(
+      "record_application_event",
+      {
+        description:
+          "Record a fact in a posting's application timeline (ADR-075, " +
+          "Phase 2's first slice) — a recruiter response, an interview, an " +
+          "outcome. Never 'applied' itself (see mark_applied): this starts " +
+          "after applying. This tool never reads email itself — the caller " +
+          "(you, or the operator directly) must already know the fact from " +
+          "its own source.",
+        inputSchema: {
+          fingerprint: z.string().describe("The posting's fingerprint."),
+          kind: z.enum(APPLICATION_EVENT_KINDS),
+          note: z.string().optional().describe("Optional free-text detail."),
+          occurredAt: z
+            .string()
+            .datetime()
+            .optional()
+            .describe("ISO 8601. Defaults to now if omitted."),
+        },
+      },
+      ({ fingerprint, kind, note, occurredAt }) =>
+        safely(() => {
+          requirePrincipalKind(principal, ["admin", "feedback"]);
+          return this.feedback.record(
+            { fingerprint, kind, note, occurredAt },
+            principal.id,
+          );
+        }),
+    );
+
+    server.registerTool(
+      "list_application_events",
+      {
+        description:
+          "A posting's full application-event history, most recent first " +
+          "(ADR-075). Read-only, same access level as list_postings.",
+        inputSchema: {
+          fingerprint: z.string().describe("The posting's fingerprint."),
+        },
+      },
+      ({ fingerprint }) => safely(() => this.feedback.list(fingerprint)),
     );
 
     server.registerTool(

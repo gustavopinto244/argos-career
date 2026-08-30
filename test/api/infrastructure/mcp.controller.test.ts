@@ -23,6 +23,7 @@ import {
   Db,
   runMigrations,
 } from "../../../src/persistence/infrastructure/db";
+import { ApplicationEventsRepository } from "../../../src/feedback/infrastructure/application-events-repository";
 import { PostingsRepository } from "../../../src/persistence/infrastructure/postings-repository";
 import { RunsRepository } from "../../../src/persistence/infrastructure/runs-repository";
 import {
@@ -33,6 +34,7 @@ import { createPosting } from "../../../src/posting/domain/posting";
 
 const API_KEY = "test-api-key-for-mcp-suite";
 const AUTOMATION_KEY = "test-automation-key-for-mcp-suite";
+const FEEDBACK_KEY = "test-feedback-key-for-mcp-suite";
 
 /** No real Gupy/Telegram request in this suite — same reasoning as
  * runs.controller.test.ts's fakes. */
@@ -69,6 +71,7 @@ beforeEach(async () => {
   process.env.DATABASE_PATH = join(dir, "argos.db");
   process.env.API_KEY = API_KEY;
   process.env.API_AUTOMATION_KEY = AUTOMATION_KEY;
+  process.env.API_FEEDBACK_KEY = FEEDBACK_KEY;
   process.env.SCORER_ADAPTER = "stub";
   process.env.PROFILE_PATH = "./config/profile.example.yaml";
 
@@ -116,7 +119,7 @@ function textOf(result: Awaited<ReturnType<Client["callTool"]>>): unknown {
 }
 
 describe("MCP server", () => {
-  it("lists all twelve tools", async () => {
+  it("lists all fourteen tools", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -126,9 +129,11 @@ describe("MCP server", () => {
         "get_health",
         "get_run",
         "get_study_plan",
+        "list_application_events",
         "list_postings",
         "list_runs",
         "mark_applied",
+        "record_application_event",
         "run_collect",
         "run_dedup",
         "run_deliver",
@@ -430,5 +435,141 @@ describe("MCP server", () => {
       arguments: { fingerprint: "does-not-exist" },
     });
     expect(result.isError).toBe(true);
+  });
+
+  describe("record_application_event / list_application_events (ADR-075)", () => {
+    it("records an event and reads it back, most recent first", async () => {
+      const posting = seedPosting("1", "Estágio Backend");
+
+      const recorded = await client.callTool({
+        name: "record_application_event",
+        arguments: {
+          fingerprint: posting.fingerprint,
+          kind: "response_received",
+          note: "recrutador pediu disponibilidade",
+        },
+      });
+      expect(textOf(recorded)).toEqual({
+        fingerprint: posting.fingerprint,
+        kind: "response_received",
+      });
+
+      await client.callTool({
+        name: "record_application_event",
+        arguments: {
+          fingerprint: posting.fingerprint,
+          kind: "interview_scheduled",
+        },
+      });
+
+      const listed = textOf(
+        await client.callTool({
+          name: "list_application_events",
+          arguments: { fingerprint: posting.fingerprint },
+        }),
+      ) as { kind: string; note: string | null }[];
+      expect(listed.map((e) => e.kind)).toEqual([
+        "interview_scheduled",
+        "response_received",
+      ]);
+      expect(listed[1]?.note).toBe("recrutador pediu disponibilidade");
+    });
+
+    it("never records 'applied' as a kind (ADR-075) — mark_applied owns that fact", async () => {
+      const posting = seedPosting("1", "Estágio Backend");
+      const result = await client.callTool({
+        name: "record_application_event",
+        arguments: { fingerprint: posting.fingerprint, kind: "applied" },
+      });
+      expect(result.isError).toBe(true);
+    });
+
+    it("returns an isError result for an unknown fingerprint", async () => {
+      const result = await client.callTool({
+        name: "record_application_event",
+        arguments: { fingerprint: "does-not-exist", kind: "rejected" },
+      });
+      expect(result.isError).toBe(true);
+    });
+
+    it("list_application_events reads an empty history without erroring", async () => {
+      const posting = seedPosting("1", "Estágio Backend");
+      const result = await client.callTool({
+        name: "list_application_events",
+        arguments: { fingerprint: posting.fingerprint },
+      });
+      expect(textOf(result)).toEqual([]);
+    });
+  });
+
+  describe("the feedback principal (ADR-075)", () => {
+    async function feedbackClient(): Promise<Client> {
+      const feedback = new Client({ name: "feedback", version: "1.0.0" });
+      const transport = new StreamableHTTPClientTransport(
+        new URL(`http://127.0.0.1:${port}/mcp`),
+        {
+          requestInit: { headers: { Authorization: `Bearer ${FEEDBACK_KEY}` } },
+        },
+      );
+      await feedback.connect(transport as unknown as Transport);
+      return feedback;
+    }
+
+    it.each([
+      "list_postings",
+      "mark_applied",
+      "unmark_applied",
+      "record_application_event",
+      "list_application_events",
+    ])("can call %s", async (name) => {
+      const posting = seedPosting("1", "Estágio Backend");
+      const feedback = await feedbackClient();
+      try {
+        const result = await feedback.callTool({
+          name,
+          arguments: {
+            fingerprint: posting.fingerprint,
+            kind: "response_received",
+          },
+        });
+        expect(result.isError).toBeFalsy();
+      } finally {
+        await feedback.close();
+      }
+    });
+
+    it.each(["discard_posting", "run_collect", "run_dedup", "run_deliver"])(
+      "cannot call %s",
+      async (name) => {
+        const posting = seedPosting("1", "Estágio Backend");
+        const feedback = await feedbackClient();
+        try {
+          const result = await feedback.callTool({
+            name,
+            arguments: { fingerprint: posting.fingerprint },
+          });
+          expect(result.isError).toBe(true);
+        } finally {
+          await feedback.close();
+        }
+      },
+    );
+
+    it("recordedBy on a feedback-reported event carries the feedback principal's id", async () => {
+      const posting = seedPosting("1", "Estágio Backend");
+      const feedback = await feedbackClient();
+      try {
+        await feedback.callTool({
+          name: "record_application_event",
+          arguments: { fingerprint: posting.fingerprint, kind: "offer" },
+        });
+      } finally {
+        await feedback.close();
+      }
+
+      const repo = new ApplicationEventsRepository(db);
+      const [row] = repo.findByFingerprint(posting.fingerprint);
+      expect(row?.recordedBy).toMatch(/^feedback:/);
+    });
   });
 });

@@ -261,6 +261,56 @@ export const partialMatches = sqliteTable(
 );
 
 /**
+ * Append-only history of what happened to a posting after "applied"
+ * (ADR-075, Phase 2's first slice — `docs/01-vision-and-scope.md`'s
+ * "Record what was applied to and what got a response"). Mirrors
+ * `postingEvents` structurally: no `update`/`delete` method exists on
+ * purpose, a correction is a later row, never an edit to history.
+ *
+ * Deliberately does NOT include an `applied` kind: `postings.appliedAt`
+ * (ADR-072) already owns that fact as a reversible toggle, and duplicating
+ * it here would create two sources of truth for "did I apply" — one
+ * reversible, one append-only. This table starts at whatever happens
+ * *after* applying; joining `postings.appliedAt IS NOT NULL` with this
+ * table's rows for a fingerprint already reconstructs the full timeline.
+ */
+export const applicationEvents = sqliteTable(
+  "application_events",
+  {
+    id: text("id").primaryKey(),
+    // Not null, unlike posting_events.fingerprint: every application event
+    // is about exactly one already-collected posting, there is no
+    // pre-fingerprint case here the way a raw-ingest rejection has.
+    fingerprint: text("fingerprint").notNull(),
+    // 'response_received' | 'interview_scheduled' | 'rejected' | 'offer' |
+    // 'withdrawn' — open string, not a DB enum, same reasoning
+    // posting_events.stage/runs.kind already use: the set can grow without
+    // a schema change.
+    kind: text("kind").notNull(),
+    // Free text, optional. Not read by any scoring or matching path — a
+    // note for whoever recorded it, the same discipline postings.discardReason
+    // already follows.
+    note: text("note"),
+    // When the real-world event happened, as reported by whoever recorded
+    // it — distinct from row-insertion time, the same distinction
+    // posting_events.occurredAt draws against the run that wrote it.
+    occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+    // The non-secret principal id that reported this (ADR-047's
+    // `principalId` shape) — Hermes vs the operator's own call. Same
+    // purpose as runs.triggeredBy: attribution without persisting a
+    // credential.
+    recordedBy: text("recorded_by").notNull(),
+    // Room for structured detail (e.g. a Gmail thread reference Hermes
+    // wants to keep) without a future migration — same role
+    // posting_events.metadata already plays.
+    metadata: text("metadata"),
+  },
+  (table) => [
+    index("application_events_fingerprint_idx").on(table.fingerprint),
+  ],
+);
+
+/**
  * One row per pipeline execution (docs/08-observability.md). `kind` names
  * the CLI stage that produced it ("collect", "dedup", and later
  * "scoreAndDeliver" per ADR-009) rather than a fixed enum — SQLite has no
