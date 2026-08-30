@@ -131,3 +131,72 @@ describe("aggregateCorpus", () => {
     expect(result.skillFrequency).toEqual([]);
   });
 });
+
+describe("free-text labels are grouped by spelling, not by exact string", () => {
+  // Measured on production 2026-08-29: 40 of 488 distinct city labels were
+  // spelling variants of another ("BRASILIA" (10) beside "Brasilia" (269)),
+  // and 12 of 2,964 company labels likewise.
+  it("merges city spellings and reports the most common one", () => {
+    const result = aggregateCorpus(
+      [
+        ...Array.from({ length: 5 }, () => entry({ city: "Brasília" })),
+        entry({ city: "BRASÍLIA" }),
+        entry({ city: "brasilia" }),
+      ],
+      TAXONOMY,
+    );
+
+    expect(result.regions).toEqual([{ label: "Brasília", count: 7 }]);
+  });
+
+  it("merges company spellings the same way", () => {
+    const result = aggregateCorpus(
+      [
+        entry({ company: "Cagece" }),
+        entry({ company: "Cagece" }),
+        entry({ company: "CAGECE" }),
+      ],
+      TAXONOMY,
+    );
+
+    expect(result.companies).toEqual([{ label: "Cagece", count: 3 }]);
+  });
+
+  // The consequence that made this worth fixing: the split reordered the
+  // report's own ranking. "Santos" outranked a "São José dos Campos" whose
+  // real total was higher but sat across two rows.
+  it("ranks on the merged total, not on the largest single spelling", () => {
+    const result = aggregateCorpus(
+      [
+        ...Array.from({ length: 4 }, () => entry({ city: "Santos" })),
+        ...Array.from({ length: 3 }, () => entry({ city: "São José" })),
+        ...Array.from({ length: 2 }, () => entry({ city: "SÃO JOSÉ" })),
+      ],
+      TAXONOMY,
+    );
+
+    expect(result.regions.map((r) => r.label)).toEqual(["São José", "Santos"]);
+    expect(result.regions[0]?.count).toBe(5);
+  });
+
+  // Closed enums are not free text — normalizing a value that cannot vary
+  // would only obscure where the label comes from.
+  it("leaves the enum-valued buckets on their raw values", () => {
+    const result = aggregateCorpus(
+      [
+        entry({ workMode: "remote" }),
+        entry({ workMode: "hybrid" }),
+        entry({ seniority: "internship" }),
+      ],
+      TAXONOMY,
+    );
+    expect(result.workModes.map((b) => b.label).sort()).toEqual([
+      "hybrid",
+      "remote",
+    ]);
+    expect(result.experienceLevels.map((b) => b.label).sort()).toEqual([
+      "internship",
+      "unknown",
+    ]);
+  });
+});
