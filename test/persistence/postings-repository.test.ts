@@ -748,3 +748,75 @@ describe("country round-trip (ADR-068)", () => {
     );
   });
 });
+
+describe("re-collection must not blank facts the source does not carry", () => {
+  // Measured on production 2026-08-29, before this was fixed: 111 of 214
+  // postings (52%) holding a cached Stage A extraction had
+  // `postings.seniority` back at null while `extractions.seniority` still
+  // said "internship". `aggregate-corpus.ts` reads the posting column, so
+  // M10's seniority breakdown reported "unknown" for half the corpus it had
+  // already paid a model call to classify.
+  it("keeps Stage A's seniority/experienceYears across a re-collection", () => {
+    repository.upsert(posting());
+    repository.updateExtractedFields(posting().fingerprint, "internship", 1);
+
+    // Exactly what a collector produces on the next cycle: no normalizer
+    // ever sets these two fields, so they arrive null every time.
+    repository.upsert(
+      posting({ lastSeenAt: new Date("2026-08-20T03:00:00Z") }),
+    );
+
+    const stored = repository.findByFingerprint(posting().fingerprint);
+    expect(stored?.seniority).toBe("internship");
+    expect(stored?.experienceYears).toBe(1);
+    expect(stored?.lastSeenAt).toEqual(new Date("2026-08-20T03:00:00Z"));
+  });
+
+  it("keeps a stored description when a second source states none", () => {
+    repository.upsert(posting({ description: "Requisitos: Node, SQL." }));
+    // `normalizeLinkedinAlertJob` hardcodes description: null, and 24
+    // fingerprints have already been collected from more than one source.
+    repository.upsert(posting({ source: "linkedin", description: null }));
+
+    const stored = repository.findByFingerprint(posting().fingerprint);
+    expect(stored?.description).toBe("Requisitos: Node, SQL.");
+    // The source itself is not coalesced — the latest statement wins.
+    expect(stored?.source).toBe("linkedin");
+  });
+
+  it.each([
+    ["sourceUrl", "https://example.test/vaga/1"],
+    ["country", "BR"],
+  ] as const)(
+    "keeps a stored %s when the next collection omits it",
+    (field, value) => {
+      repository.upsert(posting({ [field]: value }));
+      repository.upsert(posting({ [field]: null }));
+      expect(repository.findByFingerprint(posting().fingerprint)?.[field]).toBe(
+        value,
+      );
+    },
+  );
+
+  it.each([
+    ["publishedAt", new Date("2026-08-10T00:00:00Z")],
+    ["applicationDeadline", new Date("2026-09-30T00:00:00Z")],
+  ] as const)(
+    "keeps a stored %s when the next collection omits it",
+    (field, value) => {
+      repository.upsert(posting({ [field]: value }));
+      repository.upsert(posting({ [field]: null }));
+      expect(
+        repository.findByFingerprint(posting().fingerprint)?.[field],
+      ).toEqual(value);
+    },
+  );
+
+  it("still takes a NEW non-null value over the stored one", () => {
+    repository.upsert(posting({ description: "antigo" }));
+    repository.upsert(posting({ description: "novo" }));
+    expect(
+      repository.findByFingerprint(posting().fingerprint)?.description,
+    ).toBe("novo");
+  });
+});
