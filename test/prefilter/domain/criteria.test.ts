@@ -344,3 +344,56 @@ describe("CriteriaSchema rejects unrecognized keys instead of stripping them", (
     ).toBe(false);
   });
 });
+
+describe("schedule.collection.intervalHours must produce the schedule it names", () => {
+  // `collectionCronExpression` renders this into an hour-field cron step, and
+  // a step restarts at every day boundary rather than carrying across it.
+  // Measured against the real `cron` parser: 5 -> 00 05 10 15 20 (a 4h final
+  // gap), 7 -> 00 07 14 21 (a 3h one), 25 -> once daily. `positive()` alone
+  // accepted every one of them and ran on a schedule nobody asked for.
+  it.each([1, 2, 3, 4, 6, 8, 12, 24])(
+    "accepts %i, which divides 24",
+    (hours) => {
+      const parsed = CriteriaSchema.parse({
+        ...validCriteria(),
+        schedule: { collection: { intervalHours: hours } },
+      });
+      expect(parsed.schedule.collection.intervalHours).toBe(hours);
+    },
+  );
+
+  it.each([5, 7, 9, 10, 11, 13, 23])(
+    "rejects %i, which does not divide 24",
+    (hours) => {
+      expect(() =>
+        CriteriaSchema.parse({
+          ...validCriteria(),
+          schedule: { collection: { intervalHours: hours } },
+        }),
+      ).toThrow(/divide 24 evenly/);
+    },
+  );
+
+  it("rejects a fractional value, which the cron parser cannot read at all", () => {
+    expect(() =>
+      CriteriaSchema.parse({
+        ...validCriteria(),
+        schedule: { collection: { intervalHours: 4.5 } },
+      }),
+    ).toThrow(/whole number/);
+  });
+
+  it("rejects a value above 24, which silently collapses to once daily", () => {
+    expect(() =>
+      CriteriaSchema.parse({
+        ...validCriteria(),
+        schedule: { collection: { intervalHours: 25 } },
+      }),
+    ).toThrow();
+  });
+
+  it("still defaults to 4 when the section is absent", () => {
+    const parsed = CriteriaSchema.parse(validCriteria());
+    expect(parsed.schedule.collection.intervalHours).toBe(4);
+  });
+});
