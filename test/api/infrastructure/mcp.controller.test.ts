@@ -472,6 +472,7 @@ describe("MCP server", () => {
       expect(textOf(recorded)).toEqual({
         fingerprint: posting.fingerprint,
         kind: "response_received",
+        recorded: true,
       });
 
       await client.callTool({
@@ -540,13 +541,16 @@ describe("MCP server", () => {
         scope: string;
         track: string | null;
         scopedPostingCount: number;
+        unanalyzedPostingCount: number;
         gaps: unknown[];
       };
       expect(body.scope).toBe("applied");
       expect(body.track).toBeNull();
-      expect(body.scopedPostingCount).toBe(1);
-      // No cached extraction/match data was seeded, so there is nothing to
-      // rank a gap from — an empty list, not an error.
+      // Seeded with no cached Stage A/B result, so there is nothing to read
+      // gaps from — excluded from the denominator and reported separately
+      // rather than silently inflating it.
+      expect(body.scopedPostingCount).toBe(0);
+      expect(body.unanalyzedPostingCount).toBe(1);
       expect(body.gaps).toEqual([]);
     });
 

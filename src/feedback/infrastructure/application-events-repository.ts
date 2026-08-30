@@ -31,11 +31,24 @@ export function parseApplicationEventMetadata(
 export class ApplicationEventsRepository {
   constructor(private readonly db: Db) {}
 
+  /**
+   * Returns `true` when this was a new fact, `false` when an identical one
+   * (same posting, same kind, same `occurredAt`) was already recorded.
+   *
+   * Idempotent on purpose: the only thing stopping a re-report is the Gmail
+   * `flagged` marker the Hermes outcome-tracking skill sets *after* a
+   * successful record, which is external and best-effort — if it fails to
+   * apply, or the run dies between the two steps, the next run reads the
+   * same email and reports the same event again. Absorbing that is
+   * strictly better than a duplicate row or a thrown constraint error, and
+   * the boolean is what lets a caller report "recorded" and "already
+   * known" honestly rather than claiming both are new.
+   */
   record(
     event: ApplicationEvent,
     metadata?: Readonly<Record<string, unknown>> | null,
-  ): void {
-    this.db
+  ): boolean {
+    const result = this.db
       .insert(applicationEvents)
       .values({
         id: ulid(),
@@ -49,7 +62,9 @@ export class ApplicationEventsRepository {
             ? null
             : JSON.stringify(metadata),
       })
+      .onConflictDoNothing()
       .run();
+    return result.changes > 0;
   }
 
   /** A posting's full application history, most recent first. */

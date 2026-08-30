@@ -119,3 +119,62 @@ test that reuses the _same_ fixture across `scope: "applied"` and `scope:
 "discarded"` calls specifically so a hardcoded/ignored parameter would be
 caught — two tests built from differently-shaped fixtures would not have
 caught that class of bug.
+
+---
+
+## Amendment 1 — the three follow-ups the review left open, closed (2026-08-30)
+
+The Phase 2+3 review (PRs #185/#186) named three things it measured and
+deliberately did not fix. On the operator's instruction all three were
+closed, and two of them turned out to have a cleaner fix than the review
+had assumed.
+
+**1. The `discarded` scope admitted postings blocked only by academic
+period.** The review argued a fix meant importing `detectPeriodGate`'s
+heuristic into the scope for no measured gain. That was the wrong shape.
+The actual cause is that `MarketRepository.loadCorpus` called
+`computeScore` _without_ the academic context, so `periodGate` was null
+there by construction — the same "loadCorpus computes a full `ScoreOutcome`
+and throws most of it away" defect this ADR already fixed once for
+`blockingFailure`/`criticalGaps`. Passing the context and carrying
+`periodGate` onto `CorpusEntry` uses Stage C's own output instead of a
+second copy of its heuristic.
+
+Purely additive, and pinned by a test: `periodGate` is computed _after_
+`score` and `verdict` are final and feeds neither, so supplying the context
+cannot move a market-analysis number.
+
+Note what this does and does not catch. `detectPeriodGate` only fires when
+the uncapped `rawScore` already clears `review` — so it excludes exactly
+the postings that matter here, the ones that look like a good match and
+are blocked only by timing. The low-scoring period/course-gated postings
+the review measured (25 of them, Educação Física and Fisioterapia
+listings) are still admitted — and still contribute exactly zero taxonomy
+skills, which is why they were never the interesting half.
+
+**2. The `applied` scope counted postings Stage A/B never scored.**
+Measured at zero impact then (6 of 6 applied postings had cached matches)
+but latent. Now excluded from the denominator and reported as
+`unanalyzedPostingCount`, so a smaller `scopedPostingCount` is
+explainable rather than looking like postings went missing. Silently
+dropping them would have been the worse fix.
+
+**3. `application_events` had no uniqueness constraint.** The review
+called this acceptable because append-only is deliberate. Append-only and
+"the same fact recorded twice" are not the same thing, though: the only
+guard against a re-report was the Gmail `flagged` marker the Hermes
+outcome-tracking skill sets _after_ a successful record — external,
+best-effort, and skipped entirely if the run dies between the two steps.
+
+A unique index on `(fingerprint, kind, occurredAt)` plus
+`onConflictDoNothing` makes a re-report idempotent instead of duplicating.
+`recordedBy` is deliberately outside the key — the operator recording a
+rejection by hand and Hermes reporting the same one are one fact, not
+two — and so is `note`, where the first wording wins. Append-only is
+intact: a genuinely different event, including a correction at a different
+`occurredAt`, still lands as its own row. `record()` now returns whether
+the write was new, so a caller can say "already known" instead of claiming
+every re-read found something.
+
+Verified against production before migrating: zero existing duplicate
+groups, so the constraint could be added without a data repair.

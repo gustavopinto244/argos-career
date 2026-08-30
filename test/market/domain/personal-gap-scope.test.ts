@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { selectPersonalGapScope } from "../../../src/market/domain/personal-gap-scope";
+import {
+  selectPersonalGapScope,
+  unanalyzedAppliedEntries,
+} from "../../../src/market/domain/personal-gap-scope";
 import { CorpusEntry } from "../../../src/market/domain/types";
 import { createPosting } from "../../../src/posting/domain/posting";
 import { Requirement, Verdict } from "../../../src/scoring/domain/types";
+import { PeriodGate } from "../../../src/scoring/domain/period-gate";
 
 const NOW = new Date("2026-08-14T03:00:00Z");
 
@@ -16,6 +20,7 @@ function entry(
     appliedAt: Date | null;
     blockingFailure: Requirement | null;
     criticalGaps: Requirement[];
+    periodGate: PeriodGate | null;
   }> = {},
 ): CorpusEntry {
   const posting = createPosting({
@@ -37,20 +42,35 @@ function entry(
     verdict: overrides.verdict ?? null,
     blockingFailure: overrides.blockingFailure ?? null,
     criticalGaps: overrides.criticalGaps ?? [],
+    periodGate: overrides.periodGate ?? null,
     appliedAt: overrides.appliedAt ?? null,
   };
 }
 
 describe("selectPersonalGapScope — applied", () => {
   it("keeps only postings with a non-null appliedAt", () => {
-    const applied = entry({ appliedAt: NOW });
-    const notApplied = entry({ appliedAt: null });
+    const applied = entry({ appliedAt: NOW, verdict: "review" });
+    const notApplied = entry({ appliedAt: null, verdict: "review" });
     expect(selectPersonalGapScope([applied, notApplied], "applied")).toEqual([
       applied,
     ]);
   });
 
-  it("is indifferent to verdict — appliedAt alone decides", () => {
+  // An applied posting Stage A/B never produced a usable result for has no
+  // requirements to read gaps from. Counting it would leave every skill
+  // count untouched while inflating the denominator, quietly understating
+  // every real gap.
+  it("excludes an applied posting that was never scored", () => {
+    const unscored = entry({ appliedAt: NOW, verdict: null });
+    expect(selectPersonalGapScope([unscored], "applied")).toEqual([]);
+    expect(unanalyzedAppliedEntries([unscored])).toEqual([unscored]);
+  });
+
+  it("does not count a never-applied unscored posting as unanalyzed", () => {
+    expect(unanalyzedAppliedEntries([entry({ appliedAt: null })])).toEqual([]);
+  });
+
+  it("keeps an applied posting regardless of which verdict it got", () => {
     const applied = entry({ appliedAt: NOW, verdict: "discard" });
     expect(selectPersonalGapScope([applied], "applied")).toEqual([applied]);
   });
@@ -83,6 +103,17 @@ describe("selectPersonalGapScope — discarded", () => {
       verdict: "discard",
       blockingFailure: null,
       criticalGaps: [],
+    });
+    expect(selectPersonalGapScope([e], "discarded")).toEqual([]);
+  });
+
+  // ADR-053: not unqualified, only not eligible yet — and no amount of
+  // study changes an academic period.
+  it("excludes a discard blocked only by a not-yet-reached academic period", () => {
+    const e = entry({
+      verdict: "discard",
+      criticalGaps: [requirement("Cursando a partir do 4º período")],
+      periodGate: { minimumPeriod: 4, opensAtLabel: "2027.2" },
     });
     expect(selectPersonalGapScope([e], "discarded")).toEqual([]);
   });

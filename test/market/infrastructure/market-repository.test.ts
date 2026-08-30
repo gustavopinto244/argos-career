@@ -324,6 +324,66 @@ describe("MarketRepository.loadCorpus", () => {
     expect(entry?.criticalGaps).toEqual([requirement("Kubernetes")]);
   });
 
+  // ADR-053's periodGate is computed after score/verdict and feeds
+  // neither — passing the academic context can only add information, never
+  // move a market-analysis number.
+  it("leaves periodGate null when no academic context is supplied", () => {
+    const p = posting("1");
+    postingsRepo.upsert(p);
+    const requirements = [requirement("Cursando a partir do 4º período")];
+    extractionsRepo.upsert(
+      p.fingerprint,
+      STAGE_A_PROMPT_VERSION,
+      MODEL,
+      contentHashFor(p),
+      { requirements, seniority: null, experienceYears: null },
+      NOW,
+    );
+    matchesRepo.upsert(
+      p.fingerprint,
+      PROFILE_HASH,
+      STAGE_B_PROMPT_VERSION,
+      MODEL,
+      hashRequirements(requirements),
+      [notMetMatch("Cursando a partir do 4º período")],
+      NOW,
+    );
+
+    const [entry] = repository.loadCorpus(PROFILE_HASH, MODEL);
+    expect(entry?.periodGate).toBeNull();
+  });
+
+  it("supplying the academic context does not change score or verdict", () => {
+    const p = posting("1");
+    postingsRepo.upsert(p);
+    const requirements = [requirement("Node.js")];
+    extractionsRepo.upsert(
+      p.fingerprint,
+      STAGE_A_PROMPT_VERSION,
+      MODEL,
+      contentHashFor(p),
+      { requirements, seniority: null, experienceYears: null },
+      NOW,
+    );
+    matchesRepo.upsert(
+      p.fingerprint,
+      PROFILE_HASH,
+      STAGE_B_PROMPT_VERSION,
+      MODEL,
+      hashRequirements(requirements),
+      [metMatch("Node.js")],
+      NOW,
+    );
+
+    const without = repository.loadCorpus(PROFILE_HASH, MODEL);
+    const with_ = repository.loadCorpus(PROFILE_HASH, MODEL, {
+      courseStart: new Date("2026-03-01"),
+      today: NOW,
+    });
+    expect(with_[0]?.verdict).toBe(without[0]?.verdict);
+    expect(with_[0]?.criticalGaps).toEqual(without[0]?.criticalGaps);
+  });
+
   it("attaches appliedAt from PostingsRepository.markApplied", () => {
     const p = posting("1");
     postingsRepo.upsert(p);

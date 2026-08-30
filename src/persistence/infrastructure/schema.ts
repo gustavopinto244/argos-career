@@ -307,6 +307,26 @@ export const applicationEvents = sqliteTable(
   },
   (table) => [
     index("application_events_fingerprint_idx").on(table.fingerprint),
+    // Recording the same fact twice is not new history. The only guard
+    // against it was an external, best-effort marker — the Gmail `flagged`
+    // flag the Hermes outcome-tracking skill sets after a successful
+    // record. If that flag fails to apply (or the run dies between the
+    // record and the flag), the next run re-reads the same email and
+    // reports the same event again.
+    //
+    // `recordedBy` is deliberately NOT part of the key: the operator
+    // recording "rejected on the 28th" by hand and Hermes reporting the
+    // same rejection are the same fact, not two. `note` is likewise out —
+    // same fact, differently worded detail; the first one wins.
+    //
+    // This does not weaken append-only (ADR-075): a genuinely different
+    // event, including a correction at a different `occurredAt`, still
+    // lands as its own row. Only an exact re-report is absorbed.
+    uniqueIndex("application_events_fact_identity_unique").on(
+      table.fingerprint,
+      table.kind,
+      table.occurredAt,
+    ),
   ],
 );
 

@@ -23,6 +23,7 @@ function entryAt(firstSeenAt: Date): CorpusEntry {
     verdict: null,
     blockingFailure: null,
     criticalGaps: [],
+    periodGate: null,
     appliedAt: null,
   };
 }

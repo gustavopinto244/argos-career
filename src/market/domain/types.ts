@@ -1,4 +1,5 @@
 import { Match, Requirement, Verdict } from "../../scoring/domain/types";
+import { PeriodGate } from "../../scoring/domain/period-gate";
 import { Posting } from "../../posting/domain/posting";
 
 /**
@@ -34,6 +35,19 @@ export interface CorpusEntry {
   readonly verdict: Verdict | null;
   readonly blockingFailure: Requirement | null;
   readonly criticalGaps: readonly Requirement[];
+  /**
+   * Non-null when a not-yet-reached academic period is the *entire* reason
+   * this posting is capped (ADR-053) — the candidate is not unqualified,
+   * only not eligible yet. Null both when there is no period gate and when
+   * the caller supplied no academic context to detect one with.
+   *
+   * `personal-gap-scope.ts` reads it to keep "discarded because I lack a
+   * competency" from swallowing "discarded because I am in period 2 and
+   * they want period 4" — which is not a skill anyone can go and learn,
+   * the same reasoning `computeCriticalGaps` already applies to
+   * unverifiable traits.
+   */
+  readonly periodGate: PeriodGate | null;
   readonly appliedAt: Date | null;
 }
 

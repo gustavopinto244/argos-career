@@ -212,7 +212,11 @@ describe("POST/GET /postings/:fingerprint/application-events (ADR-075)", () => {
     )
       .send({ kind: "response_received", note: "resposta por e-mail" })
       .expect(201);
-    expect(recorded.body).toEqual({ fingerprint, kind: "response_received" });
+    expect(recorded.body).toEqual({
+      fingerprint,
+      kind: "response_received",
+      recorded: true,
+    });
 
     await auth(
       request(app.getHttpServer()).post(
