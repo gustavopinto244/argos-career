@@ -97,6 +97,22 @@ export function renderPostingEntry(entry: ScoredPosting): string {
       `Lacunas: ${outcome.criticalGaps.map((r) => r.text).join("; ")}`,
     );
   }
+  // ADR-078. Sits immediately under `Lacunas` because it qualifies that
+  // exact line: of the gaps just listed, these are the ones with a track
+  // record of costing postings. A gap appearing here for the first time is
+  // a one-off; one appearing at "5 vagas" is the next thing to study, and
+  // that distinction is invisible from a single posting.
+  const recurring = entry.recurringGaps ?? [];
+  if (recurring.length > 0) {
+    lines.push(
+      `Lacuna recorrente: ${recurring
+        .map(
+          (gap) =>
+            `${gap.skill} (${gap.count} ${gap.count === 1 ? "vaga" : "vagas"})`,
+        )
+        .join(", ")}`,
+    );
+  }
   return lines.join("\n");
 }
 

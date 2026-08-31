@@ -86,10 +86,23 @@ resumeVariants:
 `,
     );
 
+    // ADR-078: `onModuleInit` now loads a taxonomy too. Written here rather
+    // than left to the `./config/taxonomy.yaml` default so this test keeps
+    // depending only on its own temp directory.
+    writeFileSync(
+      join(dir, "taxonomy.yaml"),
+      `
+skills:
+  - canonical: Node.js
+    aliases: [NodeJS]
+`,
+    );
+
     env = { ...process.env };
     process.env.DATABASE_PATH = join(dir, "argos.db");
     process.env.CRITERIA_PATH = join(dir, "criteria.yaml");
     process.env.PROFILE_PATH = join(dir, "profile.yaml");
+    process.env.TAXONOMY_PATH = join(dir, "taxonomy.yaml");
     process.env.TELEGRAM_BOT_TOKEN = "000:test";
     process.env.TELEGRAM_CHAT_ID = "123";
   });

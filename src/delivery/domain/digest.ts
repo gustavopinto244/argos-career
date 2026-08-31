@@ -1,3 +1,4 @@
+import { RecurringGap } from "../../market/domain/recurring-gaps";
 import { Posting } from "../../posting/domain/posting";
 import { Recommendation } from "../../scoring/domain/recommendation";
 import { ScoreOutcome } from "../../scoring/domain/types";
@@ -25,6 +26,17 @@ export interface ScoredPosting {
   readonly posting: Posting;
   readonly outcome: ScoreOutcome &
     Recommendation & { readonly inputTruncated?: boolean };
+  /**
+   * Which of this posting's own unmet requirements have already cost the
+   * operator other postings (ADR-078). Computed by `executeDeliver` from
+   * the personal `discarded` gap scope and attached here, so the renderer
+   * stays pure and taxonomy-free.
+   *
+   * Optional, and absent rather than empty when the caller supplied no
+   * taxonomy — the digest simply omits the line, which is what every
+   * pre-ADR-078 caller and fixture gets.
+   */
+  readonly recurringGaps?: readonly RecurringGap[];
 }
 
 /**
