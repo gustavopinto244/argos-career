@@ -2990,6 +2990,159 @@ function recordingTextNotifier(): { notifier: TextNotifier; sent: string[] } {
   };
 }
 
+/**
+ * ADR-078 — the wiring, end to end: a gap on tonight's posting that the
+ * operator's own history has already been rejected for gets counted here,
+ * not just rendered. The renderer's own tests cover the text; this one
+ * covers that `executeDeliver` finds the history at all.
+ */
+describe("executeDeliver — recurring gaps (ADR-078)", () => {
+  const recurringTaxonomy: Taxonomy = {
+    skills: [{ canonical: "Python", aliases: [] }],
+  };
+
+  function pythonRequirement(): Requirement {
+    return { text: "Python", category: "language", weight: "mandatory" };
+  }
+
+  /**
+   * Puts one already-rejected posting in the corpus. Its title deliberately
+   * fails `titleRequired`, so the pre-filter keeps it out of tonight's
+   * scoring while `loadCorpus` — which reads `findActive()`, not the
+   * pre-filter — still sees it as history.
+   */
+  async function seedHistory(now: Date, profileHash: string): Promise<void> {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: now,
+      postings: [
+        {
+          source: "gupy",
+          sourceId: "900",
+          payload: gupyPayload(900, "Vaga efetiva de Backend", "Empresa Velha"),
+        },
+      ],
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const old = new PostingsRepository(db)
+      .findActive()
+      .find((p) => p.sourceId === "900")!;
+    const requirements = [pythonRequirement()];
+    new ExtractionsRepository(db).upsert(
+      old.fingerprint,
+      STAGE_A_PROMPT_VERSION,
+      "unknown",
+      normalizePostingContent(
+        old.title,
+        old.description,
+        DEFAULT_MAX_DESCRIPTION_CHARS,
+      ).contentHash,
+      { requirements, seniority: null, experienceYears: null },
+      now,
+    );
+    new MatchesRepository(db).upsert(
+      old.fingerprint,
+      profileHash,
+      STAGE_B_PROMPT_VERSION,
+      "unknown",
+      hashRequirements(requirements),
+      [createMatch(pythonRequirement(), "not_met", null)],
+      now,
+    );
+  }
+
+  async function deliverTonight(
+    now: Date,
+    taxonomy?: Taxonomy,
+  ): Promise<Digest> {
+    const collector = stubCollector({
+      source: "gupy",
+      collectedAt: now,
+      postings: [
+        {
+          source: "gupy",
+          sourceId: "1",
+          payload: gupyPayload(1, "Estágio em Backend", "Empresa Nova"),
+        },
+      ],
+    });
+    await executeCollect(db, () => collector, [{}], undefined, 0);
+
+    const scorer: ScorerPort = {
+      score: async () => ({
+        ok: true as const,
+        score: 80,
+        verdict: "apply" as const,
+        breakdown: {
+          mandatoryCoverage: 1,
+          desirableCoverage: 1,
+          trackAlignment: 1,
+        },
+        blockingFailure: null,
+        blockingFailures: [],
+        lowConfidence: false,
+        criticalGaps: [pythonRequirement()],
+        periodGate: null,
+        recommendedVariant: null,
+        highlights: [],
+        missingTerms: [],
+        inputTruncated: false,
+        stageACacheHit: false,
+        stageBCacheHit: false,
+        evidenceRejectedCount: 0,
+      }),
+    };
+    const { notifier, digests } = recordingNotifier();
+
+    await executeDeliver(
+      db,
+      scorer,
+      notifier,
+      deliverCriteria(),
+      deliverProfile(),
+      undefined,
+      () => now,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      taxonomy,
+    );
+    return digests[0]!;
+  }
+
+  it("counts a gap the operator has already been discarded for", async () => {
+    const now = new Date();
+    await seedHistory(now, hashProfile(deliverProfile(), now));
+
+    const digest = await deliverTonight(now, recurringTaxonomy);
+
+    expect(digest.recommended[0]?.recurringGaps).toEqual([
+      { skill: "Python", count: 1 },
+    ]);
+  });
+
+  it("reports no recurrence when the history is clean of that skill", async () => {
+    // Same posting, same taxonomy, no seeded rejection — the difference is
+    // the history alone, which is what the feature claims to read.
+    const now = new Date();
+
+    const digest = await deliverTonight(now, recurringTaxonomy);
+
+    expect(digest.recommended[0]?.recurringGaps).toEqual([]);
+  });
+
+  it("omits the analysis entirely when the caller passes no taxonomy", async () => {
+    const now = new Date();
+    await seedHistory(now, hashProfile(deliverProfile(), now));
+
+    const digest = await deliverTonight(now);
+
+    expect(digest.recommended[0]?.recurringGaps).toEqual([]);
+  });
+});
+
 describe("executeStudyPlan", () => {
   it("sends a study plan built from the current corpus, over the active database only", async () => {
     const collector = stubCollector({

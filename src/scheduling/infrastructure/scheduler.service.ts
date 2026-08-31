@@ -14,6 +14,8 @@ import { collectorFor } from "../../posting/infrastructure/collector-registry";
 import { Criteria } from "../../prefilter/domain/criteria";
 import { loadCriteria } from "../../prefilter/infrastructure/criteria-loader";
 import { Profile } from "../../profile/domain/profile";
+import { loadTaxonomy } from "../../market/infrastructure/taxonomy-loader";
+import { Taxonomy } from "../../market/domain/taxonomy";
 import { loadProfile } from "../../profile/infrastructure/profile-loader";
 import { buildScorer } from "../../scoring/infrastructure/build-scorer";
 import { TelegramNotifier } from "../../delivery/infrastructure/telegram-notifier";
@@ -70,6 +72,10 @@ export class SchedulerService implements OnModuleInit {
   private db!: Db;
   private criteria!: Criteria;
   private profile!: Profile;
+  /** ADR-078 — read here rather than injected, matching how this service
+   * already sources `criteria` and `profile`: from the same env-var path
+   * `taxonomyProvider` uses, in `onModuleInit`. */
+  private taxonomy!: Taxonomy;
   private notifier!: TelegramNotifier;
   private pendingAlerts!: PendingAlertsRepository;
 
@@ -98,6 +104,9 @@ export class SchedulerService implements OnModuleInit {
     );
     this.profile = loadProfile(
       process.env.PROFILE_PATH ?? "./config/profile.yaml",
+    );
+    this.taxonomy = loadTaxonomy(
+      process.env.TAXONOMY_PATH ?? "./config/taxonomy.yaml",
     );
     this.notifier = new TelegramNotifier(loadTelegramConfig(), fetch, {
       deliveryStore: new DeliveryOperationsRepository(this.db),
@@ -234,6 +243,7 @@ export class SchedulerService implements OnModuleInit {
           // `POST /runs/scoreAndDeliver/cancel` reaches whichever of the two
           // actually holds the lock right now.
           () => this.runLock.isCancelRequested("scoreAndDeliver"),
+          this.taxonomy,
         );
 
         const run = runsRepo.findById(outcome.runId);

@@ -86,6 +86,7 @@ import {
   selectPersonalGapScope,
   unanalyzedAppliedEntries,
 } from "../market/domain/personal-gap-scope";
+import { recurringGapsFor } from "../market/domain/recurring-gaps";
 import { GapAnalysisEntry } from "../market/domain/types";
 import { ProfileTrack } from "../profile/domain/profile";
 
@@ -1149,6 +1150,14 @@ export async function executeDeliver(
    * never cancelling, so every existing caller that does not pass this is
    * unaffected. */
   isCancelRequested: () => boolean = () => false,
+  /**
+   * ADR-078. Present only when the caller can supply it (the scheduler and
+   * the API both can; the CLI's own `deliver` command and every test that
+   * predates this cannot) — without it the digest omits the recurring-gap
+   * line entirely rather than rendering a hollow one, so no existing caller
+   * changes behaviour by not passing it.
+   */
+  taxonomy?: Taxonomy,
 ): Promise<DeliverOutcome> {
   const postingsRepo = new PostingsRepository(db);
   const runsRepo = new RunsRepository(db);
@@ -1544,10 +1553,49 @@ export async function executeDeliver(
       }
     }
 
+    // ADR-078. One corpus pass for the whole digest, not one per posting:
+    // `executePersonalGapAnalysis` aggregates the operator's history once,
+    // and `recurringGapsFor` is then a pure lookup per entry. Wrapped
+    // because a digest that reaches the phone matters more than the extra
+    // line on it — the gap analysis reads the same corpus the scoring loop
+    // just wrote to, and a failure here must not cost the operator a
+    // delivery that is otherwise ready to send.
+    let gapHistory: readonly GapAnalysisEntry[] = [];
+    if (taxonomy) {
+      try {
+        gapHistory = executePersonalGapAnalysis(
+          db,
+          criteria,
+          profile,
+          taxonomy,
+          { scope: "discarded" },
+          now,
+        ).gaps;
+      } catch (cause) {
+        // `console` rather than a Logger because this module has neither —
+        // it is shared by the CLI, the scheduler and the API, and stderr is
+        // the one sink all three already surface (container logs on Atlas).
+        // Swallowing this silently would be worse: the line would simply
+        // stop appearing, with nothing anywhere saying why.
+        console.warn(
+          `deliver (run ${runId}): recurring-gap history unavailable, digest will omit it: ${cause instanceof Error ? cause.message : String(cause)}`,
+        );
+      }
+    }
+
+    const withRecurringGaps = scoredEntries.map((entry) => ({
+      ...entry,
+      recurringGaps: recurringGapsFor(
+        entry.outcome.criticalGaps,
+        gapHistory,
+        taxonomy ?? { skills: [] },
+      ),
+    }));
+
     const digest = composeDigest({
       runId,
       generatedAt: startedAt,
-      scored: scoredEntries,
+      scored: withRecurringGaps,
       periodBlocked: periodBlockedEntries,
       summary: {
         collected,

@@ -159,6 +159,40 @@ describe("renderPostingEntry", () => {
     expect(text).toContain("Lacunas: Docker");
   });
 
+  it("qualifies a gap that has already cost other postings (ADR-078)", () => {
+    const text = renderPostingEntry({
+      ...scored({
+        outcome: outcome({
+          criticalGaps: [
+            { text: "Python", category: "language", weight: "mandatory" },
+            { text: "AWS", category: "cloud", weight: "mandatory" },
+          ],
+        }),
+      }),
+      recurringGaps: [
+        { skill: "Python", count: 5 },
+        { skill: "AWS", count: 1 },
+      ],
+    });
+    expect(text).toContain("Lacuna recorrente: Python (5 vagas), AWS (1 vaga)");
+  });
+
+  it("omits the recurring-gap line when no gap has a history", () => {
+    // Every pre-ADR-078 caller lands here, and so does the operator's
+    // first week of use: `recurringGaps` absent must read the same as
+    // "nothing recurring", never as an empty label.
+    const text = renderPostingEntry(
+      scored({
+        outcome: outcome({
+          criticalGaps: [
+            { text: "Docker", category: "tooling", weight: "mandatory" },
+          ],
+        }),
+      }),
+    );
+    expect(text).not.toContain("Lacuna recorrente");
+  });
+
   it("renders a scoring-failure warning instead of the lowConfidence one (docs/audit AC-009)", () => {
     const text = renderPostingEntry(
       scored({

@@ -22,12 +22,13 @@ import {
   RunsRepository,
 } from "../../persistence/infrastructure/runs-repository";
 import { Criteria } from "../../prefilter/domain/criteria";
+import { Taxonomy } from "../../market/domain/taxonomy";
 import { Profile } from "../../profile/domain/profile";
 import { buildScorer } from "../../scoring/infrastructure/build-scorer";
 import { RunLock, runExclusive } from "../../scheduling/domain/run-lock";
 import { RUN_LOCK } from "../../scheduling/infrastructure/run-lock.provider";
 import { COLLECTOR } from "./collector.provider";
-import { CRITERIA, PROFILE } from "./config.provider";
+import { CRITERIA, PROFILE, TAXONOMY } from "./config.provider";
 import { DATABASE } from "./database.provider";
 import { NOTIFIER } from "./notifier.provider";
 import { EXPENSIVE_THROTTLE } from "./throttler-limits";
@@ -72,6 +73,8 @@ export class RunsService {
     @Inject(NOTIFIER) private readonly notifier: NotifierPort,
     @Inject(CRITERIA) private readonly criteria: Criteria,
     @Inject(PROFILE) private readonly profile: Profile,
+    // ADR-078 — the digest's recurring-gap line joins on taxonomy skills.
+    @Inject(TAXONOMY) private readonly taxonomy: Taxonomy,
     @Inject(RUN_LOCK) private readonly runLock: RunLock,
     @Inject(ThrottlerStorage)
     private readonly throttlerStorage: ThrottlerStorage,
@@ -227,6 +230,7 @@ export class RunsService {
         // `cancel()` below writes to, so a cancel request placed while this
         // run is in flight is visible to it on the very next posting.
         () => this.runLock.isCancelRequested("scoreAndDeliver"),
+        this.taxonomy,
       ),
     );
     if (!outcome.ok) {
