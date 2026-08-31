@@ -79,7 +79,7 @@ describe("aggregateCorpus", () => {
     ];
     const result = aggregateCorpus(entries, TAXONOMY);
     expect(result.skillFrequency).toEqual([
-      { skill: "PostgreSQL", count: 1, percentage: 1 },
+      { skill: "PostgreSQL", count: 1, percentage: 100 },
     ]);
   });
 
@@ -91,7 +91,7 @@ describe("aggregateCorpus", () => {
     ];
     const result = aggregateCorpus(entries, TAXONOMY);
     expect(result.skillFrequency).toEqual([
-      { skill: "Docker", count: 1, percentage: 1 },
+      { skill: "Docker", count: 1, percentage: 100 },
     ]);
   });
 

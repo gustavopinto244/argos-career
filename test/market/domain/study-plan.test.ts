@@ -81,10 +81,10 @@ describe("composeStudyPlan", () => {
     expect(plan.extractedCount).toBe(1);
     expect(plan.highCompatibilityCount).toBe(1);
     expect(plan.gaps).toEqual([
-      { skill: "PostgreSQL", count: 1, percentage: 1 },
+      { skill: "PostgreSQL", count: 1, percentage: 100 },
     ]);
     expect(plan.marketDemand).toEqual([
-      { skill: "PostgreSQL", count: 1, percentage: 1 },
+      { skill: "PostgreSQL", count: 1, percentage: 100 },
     ]);
     expect(plan.volumeByWeek).toHaveLength(1);
   });

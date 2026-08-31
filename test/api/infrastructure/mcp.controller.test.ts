@@ -31,6 +31,18 @@ import {
   CollectorPort,
 } from "../../../src/posting/domain/ports/collector.port";
 import { createPosting } from "../../../src/posting/domain/posting";
+import { ExtractionsRepository } from "../../../src/persistence/infrastructure/extractions-repository";
+import { MatchesRepository } from "../../../src/persistence/infrastructure/matches-repository";
+import { loadProfile } from "../../../src/profile/infrastructure/profile-loader";
+import { hashProfile } from "../../../src/profile/domain/profile-hash";
+import { normalizePostingContent } from "../../../src/scoring/domain/posting-content-hash";
+import { hashRequirements } from "../../../src/scoring/domain/requirements-hash";
+import { DEFAULT_MAX_DESCRIPTION_CHARS } from "../../../src/scoring/infrastructure/stage-a-extractor";
+import {
+  STAGE_A_PROMPT_VERSION,
+  STAGE_B_PROMPT_VERSION,
+} from "../../../src/scoring/infrastructure/prompts";
+import { createMatch, Requirement } from "../../../src/scoring/domain/types";
 
 const API_KEY = "test-api-key-for-mcp-suite";
 const AUTOMATION_KEY = "test-automation-key-for-mcp-suite";
@@ -588,6 +600,73 @@ describe("MCP server", () => {
 
       const body = textOf(result) as { scopedPostingCount: number };
       expect(body.scopedPostingCount).toBe(0);
+    });
+
+    /**
+     * ADR-078 Amendment 1. Every other test in this block leaves `gaps`
+     * empty, so none of them can see the unit the field is actually
+     * serialised in — which is how a fraction shipped under the name
+     * `percentage` for as long as it did. This one produces a real gap and
+     * pins the unit at the MCP boundary, the surface where being wrong
+     * costs a consumer 100×.
+     *
+     * Kubernetes is in `config/taxonomy.yaml` and absent from
+     * `config/profile.example.yaml`, so it is a genuine, uncovered gap.
+     */
+    it("serialises percentage as 0-100, not as a fraction", async () => {
+      const posting = seedPosting("1", "Estágio em Backend");
+      const profile = loadProfile("./config/profile.example.yaml");
+      const now = new Date();
+      // Blocking, not merely mandatory: one unmet mandatory requirement
+      // still scores 45+ against the real `criteria.yaml` and lands in
+      // `review`, which the "discarded" scope correctly excludes. A
+      // blocking failure is what actually produces a competency discard.
+      const requirements: Requirement[] = [
+        { text: "Kubernetes", category: "tooling", weight: "blocking" },
+      ];
+      // The same expression `executePersonalGapAnalysis` resolves the model
+      // with — a cache row keyed under any other model is invisible to it,
+      // and hardcoding "unknown" here would only hold while `.env` happens
+      // not to be loaded.
+      const model = process.env.LLM_MODEL ?? "unknown";
+
+      new ExtractionsRepository(db).upsert(
+        posting.fingerprint,
+        STAGE_A_PROMPT_VERSION,
+        model,
+        normalizePostingContent(
+          posting.title,
+          posting.description,
+          DEFAULT_MAX_DESCRIPTION_CHARS,
+        ).contentHash,
+        { requirements, seniority: null, experienceYears: null },
+        now,
+      );
+      new MatchesRepository(db).upsert(
+        posting.fingerprint,
+        hashProfile(profile, now),
+        STAGE_B_PROMPT_VERSION,
+        model,
+        hashRequirements(requirements),
+        [createMatch(requirements[0]!, "not_met", null)],
+        now,
+      );
+
+      const result = await client.callTool({
+        name: "get_personal_gap_analysis",
+        arguments: { scope: "discarded" },
+      });
+
+      const body = textOf(result) as {
+        scopedPostingCount: number;
+        gaps: { skill: string; count: number; percentage: number }[];
+      };
+      expect(body.scopedPostingCount).toBe(1);
+      // The one posting in scope wants it, so this is "all of them" — 100,
+      // which the old code reported as 1.
+      expect(body.gaps).toEqual([
+        { skill: "Kubernetes", count: 1, percentage: 100 },
+      ]);
     });
 
     it("rejects a missing scope rather than defaulting to one", async () => {

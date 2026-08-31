@@ -10,8 +10,8 @@ function plan(overrides: Partial<StudyPlan> = {}): StudyPlan {
     corpusSize: 523,
     extractedCount: 16,
     highCompatibilityCount: 5,
-    gaps: [{ skill: "PostgreSQL", count: 3, percentage: 0.6 }],
-    marketDemand: [{ skill: "TypeScript", count: 10, percentage: 0.625 }],
+    gaps: [{ skill: "PostgreSQL", count: 3, percentage: 60 }],
+    marketDemand: [{ skill: "TypeScript", count: 10, percentage: 62.5 }],
     volumeByWeek: [{ weekStart: "2026-08-10", count: 12 }],
     ...overrides,
   };
@@ -46,7 +46,7 @@ describe("renderStudyPlanText", () => {
     const manyGaps = Array.from({ length: 15 }, (_, i) => ({
       skill: `Skill${i}`,
       count: 15 - i,
-      percentage: (15 - i) / 15,
+      percentage: ((15 - i) / 15) * 100,
     }));
     const text = renderStudyPlanText(plan({ gaps: manyGaps }));
     expect(text).toContain("Skill9");

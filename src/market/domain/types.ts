@@ -54,8 +54,10 @@ export interface CorpusEntry {
 export interface SkillFrequency {
   readonly skill: string;
   readonly count: number;
-  /** Of postings with at least one extraction — see `aggregate-corpus.ts`
-   * for why this denominator, not the whole corpus. */
+  /** **0–100**, not 0–1 (`percentageOf`, ADR-078 Amendment 1). Of postings
+   * with at least one extraction — see `aggregate-corpus.ts` for why this
+   * denominator, not the whole corpus; `extractedCount` ships alongside,
+   * so the exact ratio stays recoverable. */
   readonly percentage: number;
 }
 
@@ -77,11 +79,15 @@ export interface MarketAggregates {
 export interface GapAnalysisEntry {
   readonly skill: string;
   readonly count: number;
-  /** Of whatever `entries` the caller passed to `gapAnalysis` — the
-   * function no longer picks its own subset (ADR-076); each caller decides
-   * what "in scope" means (market-wide high-compatibility postings,
-   * personally applied ones, or ones discarded for a real competency gap)
-   * before calling it. */
+  /** **0–100**, not 0–1 (`percentageOf`, ADR-078 Amendment 1) — this field
+   * leaves the process raw via `get_personal_gap_analysis`, so the unit its
+   * name claims is the unit it has to hold.
+   *
+   * Of whatever `entries` the caller passed to `gapAnalysis` — the function
+   * no longer picks its own subset (ADR-076); each caller decides what "in
+   * scope" means (market-wide high-compatibility postings, personally
+   * applied ones, or ones discarded for a real competency gap) before
+   * calling it. */
   readonly percentage: number;
 }
 

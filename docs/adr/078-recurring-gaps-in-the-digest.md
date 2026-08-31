@@ -135,4 +135,64 @@ render test.
 the Telegram output is right, but `get_personal_gap_analysis` returns the
 raw field over MCP, where a consumer reading `0.15` as "0.15%" would be
 wrong by 100×. Out of scope here — this decision reads only `count` — and
-recorded so it is not rediscovered.
+recorded so it is not rediscovered. **Fixed in Amendment 1 below.**
+
+---
+
+## Amendment 1 — the percentage fields now hold percentages
+
+**Date:** 2026-08-30 · **Status:** Accepted
+
+Closing what the Consequences section above recorded and deferred.
+
+**There were two, not one.** `GapAnalysisEntry.percentage`
+(`gap-analysis.ts`) and `SkillFrequency.percentage` (`aggregate-corpus.ts`)
+each computed `count / total` under a field named `percentage` — two
+independent copies of the same wrong unit convention.
+
+**Why it stayed invisible.** The only consumer for most of their life was
+`renderStudyPlan`, whose `percent()` helper multiplied by 100 on the way
+out. The rendered Telegram text was therefore always correct, and the
+mismatch had no symptom anywhere. It only became reachable when ADR-076's
+`get_personal_gap_analysis` began returning `GapAnalysisEntry` raw over
+MCP — a surface with no renderer in front of it.
+
+`SkillFrequency` never leaked: `StudyPlanOutcome` returns counts only, so
+that field still has no path out of the process. It is fixed anyway,
+because the next consumer added to it would inherit the same trap.
+
+### Decision
+
+`percentageOf(count, total)` in `src/market/domain/percentage.ts` is now
+the single definition of the unit, and both sites call it. **One function
+rather than corrected arithmetic at each site**: the defect was two copies
+of a convention disagreeing with their own name, so the fix is to leave
+exactly one place that decides it. `percent()` in `render-study-plan.ts`
+stops multiplying.
+
+Values are **0–100**, rounded to one decimal. Rounding at the source rather
+than carrying full float precision (1/63 → 1.5873015873015872) is safe
+because both payloads ship the numerator (`count`) and the denominator
+(`extractedCount`, `scopedPostingCount`) beside the field, so an exact
+ratio stays one division away for any consumer that needs it.
+
+### Consequences
+
+**A contract change with no consumer to break.** The Hermes skills do not
+read the field and no document describes its shape, so making the name true
+was available without a migration. Had a consumer existed, renaming the
+field to `fraction` would have been the safer half of the trade.
+
+**Six existing tests failed on the change and were updated** — they had
+pinned the fraction. That is the tests doing their job: the values they now
+assert (100 for all of one, 66.7 for two of three) are the ones the field
+name always claimed.
+
+**The gap that let this ship is closed at the boundary that matters.**
+Every pre-existing `get_personal_gap_analysis` test left `gaps` empty, so
+none of them could observe the serialised unit at all. There is now one
+that seeds a real blocking failure and asserts `percentage: 100` over MCP.
+
+**Verified by reverting.** Restoring `count / total` fails that MCP test
+with `percentage: 1` — the original defect, reproduced exactly — plus three
+`percentageOf` unit tests.

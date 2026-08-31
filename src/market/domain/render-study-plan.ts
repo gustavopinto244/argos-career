@@ -3,8 +3,11 @@ import { StudyPlan } from "./study-plan";
 const TOP_GAPS = 10;
 const TOP_MARKET_DEMAND = 10;
 
+// Already 0-100 when it arrives (`percentageOf`) -- this used to be where
+// the fraction was scaled, which is what made the stored unit's name wrong
+// without any visible symptom here (ADR-078 Amendment 1).
 function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
+  return `${Math.round(value)}%`;
 }
 
 function renderCorpusLine(plan: StudyPlan): string {
