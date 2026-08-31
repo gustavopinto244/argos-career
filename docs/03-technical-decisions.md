@@ -87,6 +87,7 @@ revisited on its merits instead of re-argued from memory.
 | [074](adr/074-one-bounded-fetch-for-every-collector.md)                       | One bounded fetch for every collector: the deadline covers the body                                       | Accepted   | 2026-08-30 |
 | [075](adr/075-application-event-tracking-scoped-feedback-principal.md)        | Application-event tracking for the operator and Hermes, scoped by a new `feedback` principal              | Accepted   | 2026-08-30 |
 | [076](adr/076-phase3-redefined-personal-gap-analysis.md)                      | Phase 3 redefined: personal gap analysis over applied/discarded postings, generated communication dropped | Accepted   | 2026-08-30 |
+| [077](adr/077-unreachable-postings-get-their-own-digest-section.md)           | A posting with no link gets its own digest section, not a dead end in the recommended one                 | Accepted   | 2026-08-30 |
 
 ## When an ADR is required
 

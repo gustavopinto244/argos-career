@@ -119,6 +119,31 @@ function renderPeriodBlockedSection(digest: Digest): string {
   return `Abrem para você em breve\n\n${lines.join("\n\n")}`;
 }
 
+/**
+ * The section for postings that scored well and cannot be opened (ADR-077).
+ *
+ * Deliberately shaped differently from `renderPostingEntry`: there is no
+ * "→ link" line to print, so instead of repeating "(link não informado pela
+ * fonte)" — which reads as an error and gives the operator nothing — it
+ * names the one thing that *does* make the posting findable, the source's
+ * own identifier. For CIEE that is `codigoVaga`, carried through as
+ * `sourceId`.
+ */
+function renderUnreachableSection(digest: Digest): string {
+  const title = "Sem link direto — procure no portal da fonte";
+  if (digest.unreachable.length === 0) return `${title}\n\n(nenhuma vaga)`;
+  const lines = digest.unreachable.map(({ posting, outcome }) =>
+    [
+      `Empresa: ${posting.company}`,
+      `Cargo: ${posting.title}`,
+      `Compatibilidade: ${Math.round(outcome.score)}% · ${VERDICT_LABEL[outcome.verdict]}`,
+      `Local: ${renderLocation(posting)}`,
+      `Procure em ${posting.source} pelo código ${posting.sourceId}`,
+    ].join("\n"),
+  );
+  return `${title}\n\n${lines.join("\n\n")}`;
+}
+
 function renderSummary(digest: Digest): string {
   const { summary } = digest;
   const failedSources =
@@ -152,6 +177,7 @@ export function renderDigestText(digest: Digest): string {
     renderSection("Recomendadas", digest.recommended),
     renderSection("Vale avaliar", digest.review),
     renderPeriodBlockedSection(digest),
+    renderUnreachableSection(digest),
     renderSummary(digest),
   ];
   return sections.join("\n\n---\n\n");

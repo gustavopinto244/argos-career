@@ -54,6 +54,17 @@ function scored(overrides: Partial<ScoredPosting> = {}): ScoredPosting {
   return { posting: posting(), outcome: outcome(), ...overrides };
 }
 
+function summary() {
+  return {
+    collected: 1,
+    deduplicated: 1,
+    filtered: 1,
+    scored: 1,
+    failedSources: [],
+    truncatedSources: [],
+  };
+}
+
 describe("composeDigest", () => {
   it("buckets an apply-verdict posting into recommended", () => {
     const digest = composeDigest({
@@ -235,6 +246,105 @@ describe("composeDigest", () => {
     expect(digest.recommended.map((e) => e.posting.sourceId)).toEqual([
       "first",
       "second",
+    ]);
+  });
+});
+
+// ADR-077. Measured on production: 3.493 of 3.493 CIEE postings publish no
+// link, and CIEE nevertheless produced 8 of the 13 `apply` verdicts the
+// system has ever issued. Dropping them throws away the best matches;
+// leaving them in `recommended` promises an action the entry cannot deliver.
+describe("postings the source published no link for get their own section", () => {
+  const linkless = { sourceUrl: null, source: "ciee", sourceId: "6153296" };
+
+  it("routes a linkless apply out of recommended", () => {
+    const digest = composeDigest({
+      runId: "r1",
+      generatedAt: NOW,
+      scored: [
+        scored({
+          posting: posting(linkless),
+          outcome: outcome({ verdict: "apply", score: 80 }),
+        }),
+      ],
+      periodBlocked: [],
+      summary: summary(),
+    });
+    expect(digest.recommended).toHaveLength(0);
+    expect(digest.unreachable).toHaveLength(1);
+  });
+
+  it("routes a linkless review out of review", () => {
+    const digest = composeDigest({
+      runId: "r1",
+      generatedAt: NOW,
+      scored: [
+        scored({
+          posting: posting(linkless),
+          outcome: outcome({ verdict: "review", score: 50 }),
+        }),
+      ],
+      periodBlocked: [],
+      summary: summary(),
+    });
+    expect(digest.review).toHaveLength(0);
+    expect(digest.unreachable).toHaveLength(1);
+  });
+
+  it("leaves a linkless discard out of every section", () => {
+    const digest = composeDigest({
+      runId: "r1",
+      generatedAt: NOW,
+      scored: [
+        scored({
+          posting: posting(linkless),
+          outcome: outcome({ verdict: "discard", score: 10 }),
+        }),
+      ],
+      periodBlocked: [],
+      summary: summary(),
+    });
+    expect(digest.unreachable).toHaveLength(0);
+    expect(digest.recommended).toHaveLength(0);
+    expect(digest.review).toHaveLength(0);
+  });
+
+  // Routed on the link, not the source name — a second linkless source
+  // later gets the same treatment with no new branch.
+  it("keeps a linked posting in its normal section", () => {
+    const digest = composeDigest({
+      runId: "r1",
+      generatedAt: NOW,
+      scored: [
+        scored({ posting: posting(), outcome: outcome({ verdict: "apply" }) }),
+      ],
+      periodBlocked: [],
+      summary: summary(),
+    });
+    expect(digest.recommended).toHaveLength(1);
+    expect(digest.unreachable).toHaveLength(0);
+  });
+
+  it("sorts the section by score, like the others", () => {
+    const digest = composeDigest({
+      runId: "r1",
+      generatedAt: NOW,
+      scored: [
+        scored({
+          posting: posting({ ...linkless, sourceId: "low" }),
+          outcome: outcome({ verdict: "review", score: 46 }),
+        }),
+        scored({
+          posting: posting({ ...linkless, sourceId: "high" }),
+          outcome: outcome({ verdict: "apply", score: 88 }),
+        }),
+      ],
+      periodBlocked: [],
+      summary: summary(),
+    });
+    expect(digest.unreachable.map((e) => e.posting.sourceId)).toEqual([
+      "high",
+      "low",
     ]);
   });
 });
