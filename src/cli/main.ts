@@ -1586,7 +1586,16 @@ export async function executeDeliver(
     }
 
     const deliveredAt = now();
-    const sent = [...digest.recommended, ...digest.review];
+    // `unreachable` counts as sent (ADR-077): the operator *saw* it, and
+    // unlike a period gate — which clears on a known date, so ADR-053
+    // deliberately leaves those unnotified to resurface — a posting with no
+    // link will never acquire one. Re-showing it every night would be pure
+    // noise.
+    const sent = [
+      ...digest.recommended,
+      ...digest.review,
+      ...digest.unreachable,
+    ];
     const notifiedFingerprints: string[] = [];
     for (const entry of sent) {
       // docs/audit PR-002: a *recoverable* scoring failure (any

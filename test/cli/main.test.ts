@@ -82,8 +82,18 @@ function stubCollector(result: CollectionResult): CollectorPort {
   return { collect: async () => result };
 }
 
+// `jobUrl` is what `normalizeGupyJob` reads into `sourceUrl`. Every real
+// Gupy posting carries one (measured on production: 18 of 18 delivered Gupy
+// postings have a link), and since ADR-077 a linkless posting is routed to
+// the digest's own "no direct link" section — so a fixture without it would
+// be testing a shape production never produces.
 function gupyPayload(id: number, name: string, careerPageName = "Empresa X") {
-  return { id, name, careerPageName };
+  return {
+    id,
+    name,
+    careerPageName,
+    jobUrl: `https://portal.gupy.io/job/${id}`,
+  };
 }
 
 describe("executeCollect", () => {

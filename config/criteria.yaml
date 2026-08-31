@@ -556,6 +556,28 @@ tracks:
     # same shape B8 already fixed once for "(Humano Desenvolvimento)".
     - ia
     - inteligência artificial
+    # Added 2026-08-30, from the pre-filter false-negative audit. Measured
+    # with the REAL `classifyTrack` against all 4.368 corpus titles, not a
+    # regex approximation — which matters, because the approximation
+    # overstated the gain by 4x and two of the three terms it suggested
+    # turned out to be redundant:
+    #   "developer"       2 titles move from `unknown` to `dev`, both real
+    #                     and both remote (BairesDev — "Trainee Java
+    #                     Developer - Remote", "Python Trainee Developer -
+    #                     Remote Work"). Zero false positives across the
+    #                     corpus: the only other matches are "Node.js
+    #                     Trainee Developer" and "Full Stack Developer
+    #                     (Python)", which already classify.
+    #   "full stack"      NOT added — 0 gain. `full-stack` above already
+    #                     matches "Full Stack" once `keywordMatchesText`
+    #                     collapses the hyphen (PR #174).
+    #   "infraestrutura"  NOT added — 0 gain. Already listed under
+    #                     `security`, where "Estagiário de Infraestrutura"
+    #                     and friends already classify.
+    # The blind spot this closes is narrow and specific: the track lists are
+    # otherwise entirely Portuguese except for words that double as
+    # technology names, so an English-titled dev role classified `unknown`.
+    - developer
   security:
     - segurança
     - security

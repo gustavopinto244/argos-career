@@ -74,6 +74,23 @@ export interface Digest {
   readonly recommended: readonly ScoredPosting[];
   readonly review: readonly ScoredPosting[];
   readonly periodBlocked: readonly PeriodBlockedEntry[];
+  /**
+   * Scored `apply`/`review` postings the source published no link for
+   * (ADR-077). Kept out of `recommended`/`review` because those sections
+   * promise something this entry cannot deliver: a way to act on it.
+   *
+   * In practice this is CIEE, and it is not a normalization bug — the
+   * public endpoint genuinely publishes no per-posting URL, the per-vacancy
+   * API answers 401, and the portal 404s on the vacancy code. What CIEE
+   * does give is `codigoVaga`, carried through as `sourceId`, which is the
+   * one identifier that makes the posting findable by hand on their portal.
+   * Measured 2026-08-30: 3.493 of 3.493 CIEE postings have no link, and
+   * CIEE nevertheless produced 8 of the 13 `apply` verdicts the system has
+   * ever issued — so dropping them would throw away the best matches, and
+   * leaving them mixed in was quietly wasting the under-10-minutes budget
+   * on entries the operator could not open.
+   */
+  readonly unreachable: readonly ScoredPosting[];
   readonly summary: RunSummary;
 }
 
@@ -106,13 +123,22 @@ function byScoreDescending(a: ScoredPosting, b: ScoredPosting): number {
 export function composeDigest(input: ComposeDigestInput): Digest {
   const recommended: ScoredPosting[] = [];
   const review: ScoredPosting[] = [];
+  const unreachable: ScoredPosting[] = [];
 
   for (const entry of input.scored) {
-    if (entry.outcome.verdict === "apply") recommended.push(entry);
-    else if (entry.outcome.verdict === "review") review.push(entry);
+    const wanted =
+      entry.outcome.verdict === "apply" || entry.outcome.verdict === "review";
+    if (!wanted) continue;
+    // Routed on the link, not on the source: "no way to act on this" is a
+    // property of the entry, and a second linkless source later gets the
+    // same honest treatment without another branch here.
+    if (!entry.posting.sourceUrl) unreachable.push(entry);
+    else if (entry.outcome.verdict === "apply") recommended.push(entry);
+    else review.push(entry);
   }
   recommended.sort(byScoreDescending);
   review.sort(byScoreDescending);
+  unreachable.sort(byScoreDescending);
 
   return {
     runId: input.runId,
@@ -120,6 +146,7 @@ export function composeDigest(input: ComposeDigestInput): Digest {
     recommended,
     review,
     periodBlocked: input.periodBlocked,
+    unreachable,
     summary: input.summary,
   };
 }

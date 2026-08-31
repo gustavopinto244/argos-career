@@ -62,6 +62,7 @@ function emptyDigest(overrides: Partial<Digest> = {}): Digest {
     recommended: [],
     review: [],
     periodBlocked: [],
+    unreachable: [],
     summary: {
       collected: 0,
       deduplicated: 0,

@@ -62,6 +62,7 @@ function emptyDigest(overrides: Partial<Digest> = {}): Digest {
     recommended: [],
     review: [],
     periodBlocked: [],
+    unreachable: [],
     summary: {
       collected: 0,
       deduplicated: 0,
@@ -267,5 +268,37 @@ describe("renderDigestText", () => {
   it("reports no truncated sources as 'nenhuma'", () => {
     const text = renderDigestText(emptyDigest());
     expect(text).toContain("Fontes truncadas pelo limite: nenhuma");
+  });
+});
+
+describe("the unreachable section names the code instead of an absent link", () => {
+  it("tells the operator where to look and by which code", () => {
+    const text = renderDigestText(
+      emptyDigest({
+        unreachable: [
+          {
+            posting: posting({
+              source: "ciee",
+              sourceId: "6153296",
+              sourceUrl: null,
+              company: "SUPERARE",
+              title: "Estágio em Informática",
+            }),
+            outcome: outcome({ verdict: "apply", score: 82 }),
+          },
+        ],
+      }),
+    );
+    expect(text).toContain("Sem link direto");
+    expect(text).toContain("Procure em ciee pelo código 6153296");
+    // The point of the section: never print the dead-end line again for
+    // an entry we know has no link.
+    expect(text).not.toContain("(link não informado pela fonte)");
+  });
+
+  it("says so plainly when there is nothing unreachable", () => {
+    expect(renderDigestText(emptyDigest({}))).toContain(
+      "Sem link direto — procure no portal da fonte\n\n(nenhuma vaga)",
+    );
   });
 });

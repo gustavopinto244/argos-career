@@ -82,6 +82,7 @@ function multiChunkDigest(): Digest {
       },
     ],
     periodBlocked: [],
+    unreachable: [],
     summary: {
       collected: 1,
       deduplicated: 1,
