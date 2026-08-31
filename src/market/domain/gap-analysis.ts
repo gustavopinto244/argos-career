@@ -2,6 +2,7 @@ import { Profile } from "../../profile/domain/profile";
 import { skillsInPosting } from "./aggregate-corpus";
 import { findSkills, Taxonomy } from "./taxonomy";
 import { CorpusEntry, GapAnalysisEntry } from "./types";
+import { percentageOf } from "./percentage";
 
 /**
  * Every taxonomy skill the profile already claims, via a competency's name
@@ -54,7 +55,7 @@ export function gapAnalysis(
     .map(([skill, count]) => ({
       skill,
       count,
-      percentage: entries.length === 0 ? 0 : count / entries.length,
+      percentage: percentageOf(count, entries.length),
     }))
     .sort((a, b) => b.count - a.count);
 }

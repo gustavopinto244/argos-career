@@ -1,4 +1,5 @@
 import { normalize } from "../../posting/domain/fingerprint";
+import { percentageOf } from "./percentage";
 import { findSkills, Taxonomy } from "./taxonomy";
 import {
   CorpusEntry,
@@ -131,7 +132,7 @@ export function aggregateCorpus(
     .map(([skill, count]) => ({
       skill,
       count,
-      percentage: extracted.length === 0 ? 0 : count / extracted.length,
+      percentage: percentageOf(count, extracted.length),
     }))
     .sort((a, b) => b.count - a.count);
 

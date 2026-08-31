@@ -83,8 +83,8 @@ describe("gapAnalysis", () => {
     ];
     const result = gapAnalysis(entries, profile(["Node.js"]), TAXONOMY);
     expect(result).toEqual([
-      { skill: "PostgreSQL", count: 2, percentage: 2 / 3 },
-      { skill: "Docker", count: 1, percentage: 1 / 3 },
+      { skill: "PostgreSQL", count: 2, percentage: 66.7 },
+      { skill: "Docker", count: 1, percentage: 33.3 },
     ]);
   });
 
@@ -104,7 +104,9 @@ describe("gapAnalysis", () => {
       entry([requirement("PostgreSQL required")], null),
     ];
     const result = gapAnalysis(entries, profile([]), TAXONOMY);
-    expect(result).toEqual([{ skill: "PostgreSQL", count: 2, percentage: 1 }]);
+    expect(result).toEqual([
+      { skill: "PostgreSQL", count: 2, percentage: 100 },
+    ]);
   });
 
   it("returns an empty array when given no entries", () => {
