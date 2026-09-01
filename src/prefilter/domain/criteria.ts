@@ -152,6 +152,20 @@ export const CollectionQuerySchema = z.strictObject({
    * adding it in the first place (2026-08-23).
    */
   type: z.string().min(1).optional(),
+  /**
+   * How far back this query cares to look, in days — a *search decision*,
+   * so it belongs here rather than in the adapter. Read today only by
+   * `InfoJobsCollector`, which maps it onto InfoJobs's own `Antiguedad` age
+   * facet so postings too old to survive the recency cutoff never cost the
+   * detail-page fetch that is the only way to learn their age (ADR-079).
+   *
+   * This is not the recency window itself: `executeCollect` still applies
+   * `cutoffForSource` to everything collected. It is a hint that lets a
+   * collector avoid paying for what that cutoff will reject, and it must
+   * cover `recency.backfillDays` or the first run after an outage narrows
+   * silently.
+   */
+  maxAgeDays: z.number().int().positive().optional(),
 });
 
 /**

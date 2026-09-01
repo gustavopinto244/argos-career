@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  CollectionError,
   CollectionResult,
   CollectorPort,
 } from "../domain/ports/collector.port";
@@ -28,6 +29,10 @@ const InfoJobsCollectorCriteriaSchema = z.object({
   city: z.string().optional(),
   isRemoteWork: z.boolean().optional(),
   maxResults: z.number().int().positive().optional(),
+  /** Age window this query cares about, in days (ADR-079). Absent keeps the
+   * pre-ADR-079 behaviour: one unfiltered listing request, every card's
+   * detail page fetched. */
+  maxAgeDays: z.number().int().positive().optional(),
 });
 
 export type InfoJobsCollectorCriteria = z.infer<
@@ -64,6 +69,39 @@ const RJ_METRO_SLUG: ReadonlyMap<string, string> = new Map([
 
 const REMOTE_SLUG = "trabalho-home-office";
 
+/**
+ * InfoJobs's own `Antiguedad` age facet, bucket number → the oldest posting
+ * that bucket contains, in days. Read from the real facet links' `data-url`
+ * attributes and their labels (ADR-079), the same way ADR-063 found the
+ * location suffix: 1 "Hoje", 2 "Últimos 3 dias", 3 "Última semana",
+ * 4 "Últimos 15 dias", 5 "Último mês".
+ *
+ * **The buckets are disjoint, not cumulative** — measured, not assumed,
+ * because the labels read cumulative and the naive reading would silently
+ * drop postings. Against a live 20-card listing: bucket 2 returned the 3
+ * newest ids, bucket 3 returned 20 *older* ids, and every pair of buckets
+ * intersected in exactly zero ids. So covering "the last N days" means
+ * fetching buckets 1..k and taking their union, never bucket k alone.
+ */
+const ANTIGUEDAD_BUCKET_MAX_AGE_DAYS: readonly number[] = [1, 3, 7, 15, 30];
+
+/**
+ * The buckets whose union covers `maxAgeDays`, or `null` when no bucket
+ * combination does (a window longer than the oldest bucket) — in which case
+ * the caller falls back to one unfiltered listing request.
+ *
+ * Always returns a *prefix* `[1..k]`, never a single bucket, because of the
+ * disjointness above.
+ */
+function antiguedadBucketsFor(maxAgeDays: number | undefined): number[] | null {
+  if (maxAgeDays === undefined) return null;
+  const index = ANTIGUEDAD_BUCKET_MAX_AGE_DAYS.findIndex(
+    (days) => days >= maxAgeDays,
+  );
+  if (index === -1) return null;
+  return Array.from({ length: index + 1 }, (_, i) => i + 1);
+}
+
 // Same combining-marks range title-match.ts's own normalizer uses.
 const COMBINING_MARKS = /[\u0300-\u036f]/g;
 
@@ -85,7 +123,10 @@ function slugify(value: string): string {
  * e.g. `estagio+ti`); the location suffix is a plain hyphenated slug with
  * no separating character.
  */
-function buildListingUrl(criteria: InfoJobsCollectorCriteria): string {
+function buildListingUrl(
+  criteria: InfoJobsCollectorCriteria,
+  antiguedadBucket?: number,
+): string {
   const term = (criteria.jobName ?? "estagio").trim().replace(/\s+/g, "+");
   const locationSlug = criteria.isRemoteWork
     ? REMOTE_SLUG
@@ -95,7 +136,9 @@ function buildListingUrl(criteria: InfoJobsCollectorCriteria): string {
   const path = locationSlug
     ? `vagas-de-emprego-${term}-${locationSlug}.aspx`
     : `vagas-de-emprego-${term}.aspx`;
-  return `${BASE_URL}/${path}`;
+  const query =
+    antiguedadBucket === undefined ? "" : `?Antiguedad=${antiguedadBucket}`;
+  return `${BASE_URL}/${path}${query}`;
 }
 
 /**
@@ -153,6 +196,14 @@ function extractJobPostingJsonLd(detailHtml: string): unknown | null {
  * bounds a single query to whatever the listing's first page returns
  * (~20 cards observed), an accepted, documented gap, not a silent one —
  * see ADR-063's own "what this does not do."
+ *
+ * `maxAgeDays` softens both problems at once (ADR-079). It replaces the one
+ * unfiltered listing request with one per `Antiguedad` age bucket covering
+ * the window, so postings too old to survive the recency cutoff never cost
+ * a detail-page fetch — measured at 2,027 wasted detail fetches over eight
+ * production days — and, because each bucket returns its own page of
+ * results, the union reaches postings the single page truncated away
+ * (61 ids vs 20, on one live listing).
  */
 export class InfoJobsCollector implements CollectorPort {
   private readonly fetchImpl: FetchLike;
@@ -190,32 +241,51 @@ export class InfoJobsCollector implements CollectorPort {
 
     let schemaRejectedCount = 0;
 
-    let listingHtml: string;
-    try {
-      const listingUrl = buildListingUrl(criteria);
-      const response = await this.fetchPage(listingUrl);
-      if (!response.ok) {
-        return {
-          source: SOURCE,
-          postings: [],
-          collectedAt,
-          error: {
+    // One listing request per age bucket (ADR-079), or a single unfiltered
+    // one when the query states no window. Buckets are disjoint, so this is
+    // a union, deduplicated by card id purely defensively — two buckets
+    // returning the same id would mean InfoJobs changed the facet's
+    // semantics, and counting a posting twice is worse than the extra Map.
+    const buckets = antiguedadBucketsFor(criteria.maxAgeDays);
+    const listingUrls =
+      buckets === null
+        ? [buildListingUrl(criteria)]
+        : buckets.map((bucket) => buildListingUrl(criteria, bucket));
+
+    const cardsById = new Map<string, { id: string; href: string }>();
+    let listingError: CollectionError | undefined;
+
+    for (const [index, listingUrl] of listingUrls.entries()) {
+      if (index > 0) await sleep(this.requestIntervalMs);
+      try {
+        const response = await this.fetchPage(listingUrl);
+        if (!response.ok) {
+          listingError ??= {
             message: `InfoJobs responded ${response.status} ${response.statusText}`,
-          },
+          };
+          continue;
+        }
+        for (const card of parseInfoJobsListing(response.body)) {
+          if (!cardsById.has(card.id)) cardsById.set(card.id, card);
+        }
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : String(cause);
+        listingError ??= {
+          message: `InfoJobs listing request failed: ${detail}`,
+          cause,
         };
       }
-      listingHtml = response.body;
-    } catch (cause) {
-      const detail = cause instanceof Error ? cause.message : String(cause);
-      return {
-        source: SOURCE,
-        postings: [],
-        collectedAt,
-        error: { message: `InfoJobs listing request failed: ${detail}`, cause },
-      };
     }
 
-    const cards = parseInfoJobsListing(listingHtml);
+    // One bucket failing is a partial loss, not a collection failure — the
+    // other buckets' cards are real and independent, the same reasoning
+    // AC-004 applies to a paging collector's later-page failure. Only a run
+    // that recovered *no* listing at all returns empty-with-error.
+    if (cardsById.size === 0 && listingError) {
+      return { source: SOURCE, postings: [], collectedAt, error: listingError };
+    }
+
+    const cards = [...cardsById.values()];
     const receivedCount = cards.length;
     const truncated = cards.length > maxResults;
     const cardsToFetch = cards.slice(0, maxResults);
@@ -285,6 +355,10 @@ export class InfoJobsCollector implements CollectorPort {
       receivedCount,
       schemaRejectedCount,
       truncated,
+      // Set when at least one bucket failed but others succeeded: the run is
+      // recorded as a source failure (so the recency window widens on the
+      // next pass) while every posting recovered still persists.
+      ...(listingError ? { error: listingError } : {}),
     };
   }
 

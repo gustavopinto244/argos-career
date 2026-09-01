@@ -177,18 +177,37 @@ collection:
     # only "ti" reliably narrows the result set (4-20 real, on-track-titled
     # hits per query, sampled). Revisit if InfoJobs's own search behavior
     # changes.
+    #
+    # `maxAgeDays: 7` makes each query use InfoJobs's own `Antiguedad` age
+    # facet instead of fetching every listed posting's detail page
+    # (ADR-079). Measured 2026-08-31: without it these four queries cost 1
+    # listing + 42 detail requests per run and produced ZERO postings, every
+    # one dropped `too_old` — 2,027 detail fetches over eight days for nine
+    # postings, because the listing states no date and age can only be
+    # judged after the second request.
+    #
+    # 7, not 1, deliberately: it must cover `recency.backfillDays` above, or
+    # a query would silently ignore the widened window the first run after an
+    # outage. The tighter value would cost ~4 requests per run instead of
+    # ~21, and is only safe once the collector receives the real computed
+    # window rather than a configured constant — see ADR-079's own
+    # "what this does not do."
     - source: infojobs
       jobName: estagio ti
       city: Rio de Janeiro
+      maxAgeDays: 7
     - source: infojobs
       jobName: estagiario ti
       city: Rio de Janeiro
+      maxAgeDays: 7
     - source: infojobs
       jobName: estagio ti
       isRemoteWork: true
+      maxAgeDays: 7
     - source: infojobs
       jobName: estagiario ti
       isRemoteWork: true
+      maxAgeDays: 7
     # Re-probed 2026-08-26 (ADR-070) now that `probe:terms` can measure this
     # source directly (ADR-069), against the two remote queries above:
     #   estagio desenvolvimento   11 returned, 1 on-track
