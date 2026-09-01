@@ -516,6 +516,28 @@ One per pull request, each meeting the M3 criteria:
       derived. If a week of runs shows NerdIn delivering nothing at all, the
       decision is to park the query (as Sólides was), not to add a window to
       a dead source
+- [x] Vagas.com, a general job board with an "Informática/T.I." + "Estágio"
+      facet pair (ADR-080) — listing scrape + detail JSON-LD, same shape as
+      InfoJobs/NerdIn. The listing states each card's own publication-date
+      badge, so `maxAgeDays` filters before the detail-page fetch from day
+      one, applying ADR-079's InfoJobs cost lesson up front rather than
+      after a production measurement. `jobLocationType: "TELECOMMUTE"` read
+      directly, same as NerdIn. Two queries added to `config/criteria.yaml`
+      (Rio de Janeiro / 100% Home Office, both `maxAgeDays: 7`); overlap
+      checked before writing any collector code (2 of 16 sampled companies
+      already in the corpus, both unrelated roles). GitHub job boards
+      (backend-br/vagas and siblings) and InHire were investigated in the
+      same pass and rejected — structurally zero internship supply (2 in
+      400 issues over 14 months) and an auth-gated API with no aggregated
+      board, respectively. **Not yet run for real** — wired and unit-tested,
+      same honest status every source here records before its own first
+      live collection cycle
+- [ ] **Vagas.com: set `alerts.sourceFreshnessHours.vagas`** — deliberately
+      left unset at first, the same NerdIn posture above and for the same
+      reason: real publication cadence unknown until a week of live
+      `first_seen_at` gaps can be measured. If a week shows this source
+      delivering nothing, park the queries rather than add a window to a
+      dead source
 - [ ] `N8nCollector` behind `CollectorPort`, with one long-tail source proving
       it (ADR-008). Workflow exported and committed to `n8n/`; core verified
       unaffected with n8n stopped

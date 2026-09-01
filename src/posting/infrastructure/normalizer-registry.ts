@@ -8,6 +8,7 @@ import { normalizeInfoJobsJob } from "./infojobs-normalizer";
 import { normalizeNerdinJob } from "./nerdin-normalizer";
 import { normalizeLinkedinAlertJob } from "./linkedin-alert-normalizer";
 import { normalizeSolidesJob } from "./solides-normalizer";
+import { normalizeVagasJob } from "./vagas-normalizer";
 
 /**
  * `RawPosting` → `Posting` for one source. Every normalizer returns `null`
@@ -45,6 +46,7 @@ const NORMALIZERS: ReadonlyMap<string, Normalizer> = new Map([
   ["catho", normalizeCathoJob],
   ["infojobs", normalizeInfoJobsJob],
   ["nerdin", normalizeNerdinJob],
+  ["vagas", normalizeVagasJob],
 ]);
 
 /**

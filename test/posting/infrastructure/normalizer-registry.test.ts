@@ -49,6 +49,7 @@ describe("normalizerFor", () => {
       "linkedin",
       "nerdin",
       "solides",
+      "vagas",
     ]);
   });
 });

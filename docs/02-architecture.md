@@ -186,12 +186,12 @@ Reasoning and thresholds: ADR-010 and its amendments.
 business they are.** Worth reasoning about before building cross-source dedup
 for a pair that will never need it.
 
-| Kind                                    | How a posting gets there                                                                                                 | Overlap with other kinds                                                                                                                                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **ATS** (Gupy, Sólides)                 | The employer publishes on its own careers page, which the ATS powers                                                     | Low — the posting lives at the employer                                                                                                                                                                       |
-| **Agency** (CIEE)                       | The employer delegates hiring; candidates apply _through_ the agency                                                     | Low — a vacancy takes one route or the other, not both                                                                                                                                                        |
-| **Aggregator** (Jooble, Adzuna)         | Scraped or fed from other boards, including the two above                                                                | **High by construction** — its whole product is republishing                                                                                                                                                  |
-| **Job board** (Catho, InfoJobs, NerdIn) | The employer posts directly to the board's own audience, not syndicated from elsewhere and not the employer's own domain | **Unmeasured, plausibly non-zero** — a company might run its own Gupy/Sólides careers page and separately pay to cross-post the same role on a job board for more reach, unlike the ATS-vs-agency split above |
+| Kind                                               | How a posting gets there                                                                                                 | Overlap with other kinds                                                                                                                                                                                      |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **ATS** (Gupy, Sólides)                            | The employer publishes on its own careers page, which the ATS powers                                                     | Low — the posting lives at the employer                                                                                                                                                                       |
+| **Agency** (CIEE)                                  | The employer delegates hiring; candidates apply _through_ the agency                                                     | Low — a vacancy takes one route or the other, not both                                                                                                                                                        |
+| **Aggregator** (Jooble, Adzuna)                    | Scraped or fed from other boards, including the two above                                                                | **High by construction** — its whole product is republishing                                                                                                                                                  |
+| **Job board** (Catho, InfoJobs, NerdIn, Vagas.com) | The employer posts directly to the board's own audience, not syndicated from elsewhere and not the employer's own domain | **Unmeasured, plausibly non-zero** — a company might run its own Gupy/Sólides careers page and separately pay to cross-post the same role on a job board for more reach, unlike the ATS-vs-agency split above |
 
 Measured on the real corpus, 2026-08-16, with 386 distinct Gupy employers and
 1,552 distinct CIEE employers: **zero** companies in common. The only name
@@ -234,6 +234,12 @@ the opposite was assumed for a while, and because it decides real work:
   3,811-posting corpus, so today's real overlap is **zero**. That is a
   measurement of one moment, not a property — `report:supply` is what
   tracks whether it holds.
+- **Vagas.com (added 2026-09-01, ADR-080):** same job-board category, same
+  deferral. Measured before writing any collector code, not merely before
+  shipping a query, unlike every source above: of 16 companies sampled from
+  a live national listing, only two (Grupo Fleury, B3) already appear in the
+  corpus, and both for unrelated roles (psychology, sports internships) —
+  effectively zero real overlap on the IT-relevant subset.
 
 **A warning for whoever measures this next.** The first attempt at matching
 company names across sources produced 88 "similar" pairs, every one of them
