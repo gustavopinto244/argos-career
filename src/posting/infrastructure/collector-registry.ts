@@ -4,6 +4,7 @@ import { GupyCollector } from "./gupy-collector";
 import { InfoJobsCollector } from "./infojobs-collector";
 import { NerdinCollector } from "./nerdin-collector";
 import { SolidesCollector } from "./solides-collector";
+import { VagasCollector } from "./vagas-collector";
 
 /**
  * Which collector answers a query, keyed by the query's `source`.
@@ -22,6 +23,7 @@ const COLLECTORS: ReadonlyMap<string, () => CollectorPort> = new Map([
   ["solides", () => new SolidesCollector() as CollectorPort],
   ["infojobs", () => new InfoJobsCollector() as CollectorPort],
   ["nerdin", () => new NerdinCollector()],
+  ["vagas", () => new VagasCollector() as CollectorPort],
 ]);
 
 /**

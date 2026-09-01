@@ -255,6 +255,37 @@ collection:
     # Rio de Janeiro above. Not an oversight; deferred pending a real
     # measurement, matching Gupy's own "the remaining cities... measured
     # deliberately, not an oversight" precedent.
+    # --- Vagas.com (ADR-080), added 2026-09-01 -----------------------------
+    # A general job board, not IT-only -- but the listing supports an area
+    # facet ("Informática/T.I.") and a level facet ("Estágio") that
+    # `VagasCollector` applies to every query unconditionally (there is no
+    # criterion to turn them off: free-text search alone, measured live,
+    # matches "estágio" and returns "Estágio Nutrição", not this project's
+    # inventory). `jobName` is deliberately absent from every query below --
+    # the area facet alone does the real narrowing; a text term on top of it
+    # was measured to add nothing (`estagio-backend` returned 0,
+    # `estagio-seguranca-da-informacao` returned unrelated titles).
+    #
+    # `maxAgeDays: 7` costs nothing extra here, unlike InfoJobs's own
+    # `Antiguedad` facet (ADR-079): the listing already states each card's
+    # publication date on the same page fetched for its id/link, so ageing
+    # postings out just skips their detail-page fetch, no second listing
+    # request needed.
+    #
+    # Measured 2026-09-01 against the live site with both facets applied:
+    # national 21 postings (newest "Ontem"), Rio de Janeiro 13, 100% Home
+    # Office 1. Company overlap against the corpus checked before building
+    # this collector at all (not merely at query-selection time, unlike
+    # every other source above): of 16 companies sampled from a live
+    # national listing, only two (Grupo Fleury, B3) already appear in the
+    # corpus, and for unrelated roles (psychology, sports) -- real net-new
+    # supply, not redundant with what already ships.
+    - source: vagas
+      city: Rio de Janeiro
+      maxAgeDays: 7
+    - source: vagas
+      isRemoteWork: true
+      maxAgeDays: 7
     # --- Sólides: parked, and re-confirmed parked 2026-08-26 (ADR-070) -----
     # Remote queries were the obvious second chance -- the collector, schema,
     # normalizer and both registry entries are intact, and the normalizer
@@ -500,6 +531,7 @@ sourceDefaultCountry:
   indeed: BR
   catho: BR
   linkedin: BR
+  vagas: BR
 
 # How far into the future a source's publishedAt is still trusted
 # (docs/audit AC-029). Beyond this, it is treated as an unreliable date --

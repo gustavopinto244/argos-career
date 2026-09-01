@@ -1,0 +1,56 @@
+[
+  {
+    "id": "20000001",
+    "title": "Estágio em Desenvolvimento de Software",
+    "description": "Requisitos: Ensino Superior em andamento em Ciência da Computação, Sistemas de Informação ou área correlata. Conhecimento em alguma linguagem de programação (Python, Java, JavaScript). Inglês nível intermediário é um diferencial. Outros requisitos: disponibilidade para trabalho híbrido no Rio de Janeiro.",
+    "identifier": { "@type": "PropertyValue", "name": "Empresa Fictícia Alfa", "value": 20000001 },
+    "datePosted": "2026-08-21",
+    "validThrough": "2026-09-21",
+    "jobUrl": "https://www.vagas.com.br/vagas/v20000001/estagio-em-desenvolvimento-de-software",
+    "hiringOrganization": { "name": "Empresa Fictícia Alfa" },
+    "jobLocation": {
+      "address": {
+        "addressLocality": "Rio de Janeiro",
+        "addressRegion": "RJ",
+        "addressCountry": "Brasil"
+      }
+    },
+    "jobBenefits": "Vale-alimentação, Vale-transporte, Assistência médica"
+  },
+  {
+    "id": "20000002",
+    "title": "Programa de Estágio 2026 - TI - 100% Home Office",
+    "description": "Requisitos: cursando Análise e Desenvolvimento de Sistemas ou área correlata. Interesse em automação de processos e inteligência artificial.",
+    "identifier": { "@type": "PropertyValue", "name": "Empresa Fictícia Beta", "value": 20000002 },
+    "datePosted": "2026-08-12",
+    "validThrough": "2026-09-12",
+    "jobUrl": "https://www.vagas.com.br/vagas/v20000002/programa-de-estagio-2026-ti",
+    "jobLocationType": "TELECOMMUTE",
+    "hiringOrganization": { "name": "Empresa Fictícia Beta" },
+    "jobLocation": {
+      "address": {
+        "addressLocality": "Localização não informada",
+        "addressRegion": "SP",
+        "addressCountry": "Brasil"
+      }
+    },
+    "jobBenefits": "Seguro de vida, Vale-refeição"
+  },
+  {
+    "id": "20000003",
+    "title": "Estágio em Segurança da Informação",
+    "description": "Requisitos: cursando Segurança da Informação, Ciência da Computação ou correlata. Noções de redes e conceitos básicos de cibersegurança.",
+    "identifier": { "@type": "PropertyValue", "name": "Empresa Fictícia Gama", "value": 20000003 },
+    "datePosted": "2026-08-14",
+    "validThrough": "2026-09-14",
+    "jobUrl": "https://www.vagas.com.br/vagas/v20000003/estagio-em-seguranca-da-informacao",
+    "hiringOrganization": { "name": "Empresa Fictícia Gama" },
+    "jobLocation": {
+      "address": {
+        "addressLocality": "Niterói",
+        "addressRegion": "RJ",
+        "addressCountry": "Brasil"
+      }
+    }
+  }
+]
