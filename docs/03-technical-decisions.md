@@ -89,6 +89,7 @@ revisited on its merits instead of re-argued from memory.
 | [076](adr/076-phase3-redefined-personal-gap-analysis.md)                      | Phase 3 redefined: personal gap analysis over applied/discarded postings, generated communication dropped | Accepted   | 2026-08-30 |
 | [077](adr/077-unreachable-postings-get-their-own-digest-section.md)           | A posting with no link gets its own digest section, not a dead end in the recommended one                 | Accepted   | 2026-08-30 |
 | [078](adr/078-recurring-gaps-in-the-digest.md)                                | The digest names which of a posting's gaps have already cost the operator others                          | Accepted   | 2026-08-30 |
+| [079](adr/079-infojobs-pays-for-what-it-reads.md)                             | InfoJobs is filtered by its own `Antiguedad` age facet before any detail page is fetched                  | Accepted   | 2026-09-01 |
 
 ## When an ADR is required
 

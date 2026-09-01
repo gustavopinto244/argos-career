@@ -324,3 +324,164 @@ describe("InfoJobsCollector — listing + detail fetch", () => {
     expect(result.error).toBeUndefined();
   });
 });
+
+/**
+ * The `Antiguedad` age facet (ADR-079). The behaviour under test is not
+ * "the URL gains a query parameter" but the reason it does: without a
+ * window, every card on the listing costs a detail-page fetch before
+ * anything can judge its age, which measured at 2,027 detail fetches over
+ * eight production days for nine postings.
+ */
+describe("InfoJobsCollector — Antiguedad age buckets", () => {
+  /** Records every listing URL requested, and answers each one with `cards`
+   * keyed by the bucket it asked for. */
+  function listingSpy(cardsByBucket: Record<string, string>) {
+    const listingUrls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = url.toString();
+      if (!href.includes("vagas-de-emprego")) {
+        return htmlResponse(
+          detailHtml(jobPosting("Estágio de TI", "Empresa Fictícia")),
+        );
+      }
+      listingUrls.push(href);
+      const bucket = /Antiguedad=(\d)/.exec(href)?.[1] ?? "none";
+      return htmlResponse(listingHtml(cardsByBucket[bucket] ?? ""));
+    });
+    return { fetchImpl, listingUrls };
+  }
+
+  it("requests no Antiguedad facet when the query states no window", async () => {
+    const { fetchImpl, listingUrls } = listingSpy({ none: "" });
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    await collector.collect({ jobName: "estagio ti", city: "Rio de Janeiro" });
+
+    expect(listingUrls).toEqual([
+      "https://www.infojobs.com.br/vagas-de-emprego-estagio+ti-rio-de-janeiro.aspx",
+    ]);
+  });
+
+  it("requests only bucket 1 for a one-day window", async () => {
+    const { fetchImpl, listingUrls } = listingSpy({ "1": "" });
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    const result = await collector.collect({
+      jobName: "estagio ti",
+      city: "Rio de Janeiro",
+      maxAgeDays: 1,
+    });
+
+    expect(listingUrls).toEqual([
+      "https://www.infojobs.com.br/vagas-de-emprego-estagio+ti-rio-de-janeiro.aspx?Antiguedad=1",
+    ]);
+    // The whole point: an empty "Hoje" bucket costs one request and zero
+    // detail fetches, where the unfiltered listing cost one plus one per card.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.postings).toEqual([]);
+    expect(result.error).toBeUndefined();
+  });
+
+  /**
+   * The disjointness measurement in `ANTIGUEDAD_BUCKET_MAX_AGE_DAYS`'s own
+   * doc comment, pinned: a seven-day window must fetch buckets 1, 2 AND 3,
+   * because bucket 3 alone holds only postings older than three days.
+   * Reading the labels as cumulative and requesting bucket 3 alone would
+   * silently lose everything published this week.
+   */
+  it("requests buckets 1..3 for a seven-day window and unions their cards", async () => {
+    const { fetchImpl, listingUrls } = listingSpy({
+      "1": listingCard("111", "/vaga-de-estagio-ti__111.aspx"),
+      "2": listingCard("222", "/vaga-de-estagio-ti__222.aspx"),
+      "3": listingCard("333", "/vaga-de-estagio-ti__333.aspx"),
+    });
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    const result = await collector.collect({
+      jobName: "estagio ti",
+      maxAgeDays: 7,
+    });
+
+    expect(listingUrls.map((u) => /Antiguedad=(\d)/.exec(u)?.[1])).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+    expect(result.postings.map((p) => p.sourceId).sort()).toEqual([
+      "111",
+      "222",
+      "333",
+    ]);
+    expect(result.receivedCount).toBe(3);
+  });
+
+  it("falls back to one unfiltered listing when no bucket covers the window", async () => {
+    const { fetchImpl, listingUrls } = listingSpy({ none: "" });
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    // 60 days is past the oldest bucket ("Último mês"), so filtering would
+    // silently cap the window rather than widen it.
+    await collector.collect({ jobName: "estagio ti", maxAgeDays: 60 });
+
+    expect(listingUrls).toEqual([
+      "https://www.infojobs.com.br/vagas-de-emprego-estagio+ti.aspx",
+    ]);
+  });
+
+  it("counts a card appearing in two buckets once, not twice", async () => {
+    const duplicated = listingCard("111", "/vaga-de-estagio-ti__111.aspx");
+    const { fetchImpl } = listingSpy({ "1": duplicated, "2": duplicated });
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    const result = await collector.collect({
+      jobName: "estagio ti",
+      maxAgeDays: 3,
+    });
+
+    expect(result.postings).toHaveLength(1);
+    expect(result.receivedCount).toBe(1);
+  });
+
+  it("keeps the cards from healthy buckets when one bucket fails", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = url.toString();
+      if (!href.includes("vagas-de-emprego")) {
+        return htmlResponse(
+          detailHtml(jobPosting("Estágio de TI", "Empresa Fictícia")),
+        );
+      }
+      if (href.includes("Antiguedad=2")) {
+        return new Response("Server Error", { status: 500 });
+      }
+      return htmlResponse(
+        listingHtml(listingCard("111", "/vaga-de-estagio-ti__111.aspx")),
+      );
+    });
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    const result = await collector.collect({
+      jobName: "estagio ti",
+      maxAgeDays: 3,
+    });
+
+    // Bucket 1's posting survives; the run still reports the failure so the
+    // recency window widens on the next pass (AC-004's reasoning).
+    expect(result.postings.map((p) => p.sourceId)).toEqual(["111"]);
+    expect(result.error?.message).toContain("500");
+  });
+
+  it("returns an empty error result when every bucket fails", async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response("Server Error", { status: 500 }),
+    );
+    const collector = new InfoJobsCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    const result = await collector.collect({
+      jobName: "estagio ti",
+      maxAgeDays: 3,
+    });
+
+    expect(result.postings).toEqual([]);
+    expect(result.error?.message).toContain("500");
+  });
+});
