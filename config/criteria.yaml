@@ -864,14 +864,16 @@ scoring:
   ignoredProviders:
     - sail-research
 
-# Two independent crons (ADR-009, M8). Collection is frequent and cheap — no
-# LLM. Scoring and delivery run once nightly, in an off-peak window, because
-# that is the only point where the model (and its resource cost) runs.
+# Two independent crons (ADR-009, M8; Amendment 1). Collection is frequent and
+# cheap — no LLM. Scoring and delivery run in one or more daily windows —
+# twice daily since Amendment 1, now that ApiScorer (ADR-016) removed the
+# local-model resource-contention reason for confining it to a single
+# off-peak window.
 schedule:
   collection:
     intervalHours: 4
   scoreAndDeliver:
-    time: "03:00"
+    times: ["05:00", "17:00"]
     timezone: America/Sao_Paulo
 
 # docs/08-observability.md. Delivered through the same Telegram notifier as

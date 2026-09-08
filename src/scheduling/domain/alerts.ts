@@ -196,7 +196,7 @@ function wallClock(date: Date, timeZone: string): string {
 
 export interface MissedRunConfig {
   readonly scoreAndDeliver: {
-    readonly time: string;
+    readonly times: readonly string[];
     readonly timezone: string;
   };
   readonly collection: { readonly intervalHours: number };
@@ -207,6 +207,12 @@ export interface MissedRunConfig {
  * `scoreAndDeliver` run means no digest that day, so it alerts on the
  * **first** miss; a missed `collection` cycle self-heals a few hours later,
  * so it alerts only after **two** in a row.
+ *
+ * `scoreAndDeliver.times` may hold more than one daily window (ADR-009
+ * Amendment 1). "Missed" is evaluated against the **most recent window that
+ * has already passed today** — not "did anything succeed today" — so a
+ * second window failing after the first one succeeded is still caught
+ * instead of hiding behind the earlier success.
  */
 export function evaluateMissedRuns(
   now: Date,
@@ -215,21 +221,26 @@ export function evaluateMissedRuns(
   config: MissedRunConfig,
 ): Alert[] {
   const alerts: Alert[] = [];
-  const { time, timezone } = config.scoreAndDeliver;
+  const { timezone } = config.scoreAndDeliver;
+  const times = [...config.scoreAndDeliver.times].sort();
 
   const nowWallClock = wallClock(now, timezone);
   const [nowDate, nowTime] = nowWallClock.split(" ") as [string, string];
-  const scheduledPassedToday = nowTime >= time;
+  const passedTimesToday = times.filter((t) => t <= nowTime);
+  const mostRecentScheduled = passedTimesToday.at(-1) ?? null;
 
-  if (scheduledPassedToday) {
-    const lastDeliverDate = lastSuccessfulDeliver
-      ? wallClock(lastSuccessfulDeliver.finishedAt ?? now, timezone).split(
-          " ",
-        )[0]
+  if (mostRecentScheduled !== null) {
+    const lastDeliverWallClock = lastSuccessfulDeliver
+      ? wallClock(lastSuccessfulDeliver.finishedAt ?? now, timezone)
       : null;
-    if (lastDeliverDate !== nowDate) {
+    const [lastDeliverDate, lastDeliverTime] = lastDeliverWallClock
+      ? (lastDeliverWallClock.split(" ") as [string, string])
+      : [null, null];
+    const missed =
+      lastDeliverDate !== nowDate || lastDeliverTime! < mostRecentScheduled;
+    if (missed) {
       alerts.push({
-        text: `No successful scoreAndDeliver run today (scheduled ${time} ${timezone}) — no digest sent.`,
+        text: `No successful scoreAndDeliver run since the ${mostRecentScheduled} ${timezone} window today — no digest sent.`,
         key: "run:missed:scoreAndDeliver",
       });
     }

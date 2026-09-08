@@ -103,3 +103,67 @@ regardless of which cron triggers it by default.
   digest.
 - Reversing this is cheap: both schedules are cron expressions in configuration,
   changeable without a code change or another ADR.
+
+## Amendment 1 — twice-daily `scoreAndDeliver`, 2026-09-08
+
+### Context
+
+The original decision confined `scoreAndDeliver` to a single nightly window
+for one concrete reason: it was the only point where the local, GPU-less
+model ran, and running that inference at an unpredictable time risked
+contending with `atlas-manager`, Nginx and cloudflared's daytime traffic. That
+reason no longer holds — `OllamaScorer` was retired in ADR-016, and `ApiScorer`
+calls a hosted model over HTTP, so a `scoreAndDeliver` run no longer touches
+Atlas's own CPU/GPU budget in a way that matters.
+
+Separately, real measured cost per run is cents, not dollars (`docs/10`:
+recent nights ranged $0.0007–$0.012), so running it twice a day does not
+introduce a cost concern the once-nightly decision was ever protecting
+against either.
+
+The concrete trigger: diagnosing and fixing the LinkedIn n8n Gmail credential
+(`[[linkedin-ingest-blocked-on-link]]` in the operator's own notes) on
+2026-09-08 left 43 new postings collected mid-evening, hours after that day's
+one nightly run had already passed — they would otherwise have waited until
+the next night to reach the digest at all.
+
+### Decision
+
+`schedule.scoreAndDeliver` changes from a single `time: string` to
+`times: string[]` (one shared `timezone`), minimum one entry, deduplicated
+and sorted at validation time (`CriteriaSchema`). Configured value moves from
+`["03:00"]` to `["05:00", "17:00"]` — two windows, not an arbitrary higher
+frequency, matching what one clear request actually asked for.
+
+`SchedulerService` registers one independent `CronJob` per entry
+(`scoreAndDeliver:0`, `scoreAndDeliver:1`, …), all sharing the same handler
+and the same `RunLock` key ("scoreAndDeliver") the manual `POST /runs/deliver`
+path already uses — two windows landing back-to-back is exactly the case that
+lock already exists to serialize, so no new coordination was needed.
+
+`evaluateMissedRuns` (`docs/08-observability.md`) changes from "did a
+successful run land today" to "did a successful run land since the most
+recent window that has already passed today" — the single-window version
+would have gone blind to a second window failing on a day the first one
+succeeded.
+
+### Consequences
+
+- **Worst-case discovery-to-delivery latency roughly halves again**, the same
+  kind of improvement the original ADR-009 decision was made for — a posting
+  collected just after the 05:00 run now waits at most until 17:00, not until
+  the next day's 05:00.
+- **Twice the LLM spend per day.** At current measured cost (cents per run)
+  this is not a real budget concern, but it is not free, and would need
+  revisiting if per-run cost ever grows (a bigger model, a pricier provider).
+- **Two `scoreAndDeliver` Telegram digests a day** instead of one changes the
+  reading habit ADR-009 named as a consequence to verify — worth checking
+  whether two smaller digests still fit the "digest as a daily habit" framing
+  approvingly, or start to feel like noise.
+- **The missed-run alert got strictly more correct**, not just adapted: it
+  now catches a later window failing independently of an earlier one
+  succeeding, a gap the single-window version could not have had (only one
+  window existed to check).
+- Adding a third window, or changing either time, remains a configuration
+  edit — no code change, no further ADR — same as the original decision's
+  own closing consequence.

@@ -135,12 +135,12 @@ describe("CriteriaSchema", () => {
     });
   });
 
-  describe("schedule (M8, ADR-009)", () => {
+  describe("schedule (M8, ADR-009; multiple times, ADR-009 Amendment 1)", () => {
     it("defaults to ADR-009's own defaults when the section is omitted entirely", () => {
       const result = CriteriaSchema.parse(validCriteria());
       expect(result.schedule).toEqual({
         collection: { intervalHours: 4 },
-        scoreAndDeliver: { time: "03:00", timezone: "America/Sao_Paulo" },
+        scoreAndDeliver: { times: ["03:00"], timezone: "America/Sao_Paulo" },
       });
     });
 
@@ -149,20 +149,48 @@ describe("CriteriaSchema", () => {
         ...validCriteria(),
         schedule: {
           collection: { intervalHours: 2 },
-          scoreAndDeliver: { time: "23:30", timezone: "UTC" },
+          scoreAndDeliver: { times: ["23:30"], timezone: "UTC" },
         },
       });
       expect(result.schedule.collection.intervalHours).toBe(2);
       expect(result.schedule.scoreAndDeliver).toEqual({
-        time: "23:30",
+        times: ["23:30"],
         timezone: "UTC",
       });
     });
 
-    it("rejects a scoreAndDeliver.time not in HH:mm 24h form", () => {
+    it("accepts more than one daily time, sorted ascending", () => {
+      const result = CriteriaSchema.parse({
+        ...validCriteria(),
+        schedule: {
+          scoreAndDeliver: { times: ["17:00", "05:00"], timezone: "UTC" },
+        },
+      });
+      expect(result.schedule.scoreAndDeliver.times).toEqual(["05:00", "17:00"]);
+    });
+
+    it("deduplicates a repeated time", () => {
+      const result = CriteriaSchema.parse({
+        ...validCriteria(),
+        schedule: {
+          scoreAndDeliver: { times: ["05:00", "05:00"], timezone: "UTC" },
+        },
+      });
+      expect(result.schedule.scoreAndDeliver.times).toEqual(["05:00"]);
+    });
+
+    it("rejects an empty times array", () => {
       const criteria = {
         ...validCriteria(),
-        schedule: { scoreAndDeliver: { time: "3am" } },
+        schedule: { scoreAndDeliver: { times: [] } },
+      };
+      expect(CriteriaSchema.safeParse(criteria).success).toBe(false);
+    });
+
+    it("rejects a scoreAndDeliver time not in HH:mm 24h form", () => {
+      const criteria = {
+        ...validCriteria(),
+        schedule: { scoreAndDeliver: { times: ["3am"] } },
       };
       expect(CriteriaSchema.safeParse(criteria).success).toBe(false);
     });

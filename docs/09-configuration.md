@@ -111,9 +111,9 @@ scoring:
   thresholds: # apply 70, review 45
   minExtractedRequirements: # lowConfidence trigger
   maxScoreRetries: # ADR-006
-schedule: # two independent crons, ADR-009
+schedule: # two independent crons, ADR-009 (Amendment 1: multiple daily windows)
   collection: # interval, default every 4h — no LLM
-  scoreAndDeliver: # daily time + timezone, default 03:00 America/Sao_Paulo
+  scoreAndDeliver: # one or more daily times + a shared timezone, default ["03:00"] America/Sao_Paulo
 alerts:
   consecutiveEmptyCollectionRuns: # tolerant — collection is frequent
   missedScoreAndDeliverRun: # not tolerant — this is the digest

@@ -1138,7 +1138,7 @@ function deliverCriteria(): Criteria {
     rejectUnknownTrack: false,
     schedule: {
       collection: { intervalHours: 4 },
-      scoreAndDeliver: { time: "03:00", timezone: "America/Sao_Paulo" },
+      scoreAndDeliver: { times: ["03:00"], timezone: "America/Sao_Paulo" },
     },
     alerts: {
       consecutiveEmptyCollectionRuns: 2,
