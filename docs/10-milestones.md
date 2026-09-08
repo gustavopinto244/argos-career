@@ -238,7 +238,7 @@ deliberate deferrals with a stated reason, not gaps.
 - [x] Scheduling live in-process: `@nestjs/schedule` wired through
       `SchedulerService`, two independent crons per ADR-009 (collection every
       `schedule.collection.intervalHours`, score+deliver daily at
-      `schedule.scoreAndDeliver.time`/`timezone`), registered dynamically
+      `schedule.scoreAndDeliver.times`/`timezone`), registered dynamically
       via `SchedulerRegistry` since the expressions are only known once
       `criteria.yaml` loads. **Deployed and confirmed running on Atlas**,
       2026-08-15: the container logs the same "Scheduled: collection every

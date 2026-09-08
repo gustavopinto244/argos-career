@@ -104,9 +104,10 @@ Two independent schedules, deliberately different in frequency and in cost
 collects, normalizes, deduplicates and pre-filters. None of that needs a model,
 so none of it is confined to a time window.
 
-**Scoring and delivery run once nightly**, in a configured off-peak window
-(default `03:00 America/Sao_Paulo`). This is the only window in which the LLM
-runs and the only time the digest is delivered — **daily**, not twice a week.
+**Scoring and delivery run in one or more configured daily windows**
+(default `05:00` and `17:00` America/Sao_Paulo, ADR-009 Amendment 1). These are
+the only windows in which the LLM runs and the only times the digest is
+delivered — **daily**, not twice a week.
 
 Reasoning:
 
@@ -114,14 +115,20 @@ Reasoning:
   board rather than a burst, which is what rate limiting is designed to catch.
   Running it every few hours instead of once a day only improves this.
 - A posting appearing at 9am is now discovered within a few hours and delivered
-  that same night — worst case, once nightly. Under the old twice-weekly
-  digest, a posting appearing right after Friday's send waited until the
-  following Tuesday. **This is a strict latency improvement, not only a
-  resource optimization.**
-- Confining the LLM to one nightly window means the model loads once, runs one
-  bounded batch, and unloads — instead of contending with `atlas-manager`,
-  Nginx and the other Atlas services during hours when they are actually
-  serving traffic.
+  the same day, at the next configured window — worst case, one window's wait.
+  Under the old twice-weekly digest, a posting appearing right after Friday's
+  send waited until the following Tuesday. **This is a strict latency
+  improvement, not only a resource optimization**, and the reason ADR-009's
+  amendment added a second window rather than leaving well enough alone.
+- The original decision confined the LLM to a single nightly window so the
+  model would load once, run one bounded batch, and unload — instead of
+  contending with `atlas-manager`, Nginx and the other Atlas services during
+  hours when they are actually serving traffic. That reasoning applied to a
+  GPU-less local model (`OllamaScorer`); `ApiScorer` (ADR-016) calls a hosted
+  model over HTTP instead, so a `scoreAndDeliver` run no longer touches
+  Atlas's own compute budget, and the number of daily windows is now a plain
+  configuration trade-off between latency and LLM spend, not a resource
+  constraint.
 - `firstSeenAt` (ADR-007 amendment) is now accurate to within the collection
   interval rather than to within a day, which matters once M10's market
   analysis reads it.

@@ -467,19 +467,28 @@ export const CriteriaSchema = z.strictObject({
         .default({ intervalHours: 4 }),
       scoreAndDeliver: z
         .object({
-          // HH:mm, 24h. Validated as a string shape here; the scheduler
-          // infrastructure is what turns it into a cron expression.
-          time: z
-            .string()
-            .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:mm, 24h")
-            .default("03:00"),
+          // HH:mm, 24h, one or more independent daily firings (ADR-009
+          // Amendment 1). Validated as a string shape here; the scheduler
+          // infrastructure is what turns each entry into its own cron
+          // expression. Deduplicated and sorted so `evaluateMissedRuns` can
+          // assume ascending order without re-sorting itself, and so a typo'd
+          // duplicate doesn't silently double-run the same window.
+          times: z
+            .array(
+              z
+                .string()
+                .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:mm, 24h"),
+            )
+            .min(1, "at least one scoreAndDeliver time is required")
+            .transform((times) => [...new Set(times)].sort())
+            .default(["03:00"]),
           timezone: z.string().min(1).default("America/Sao_Paulo"),
         })
-        .default({ time: "03:00", timezone: "America/Sao_Paulo" }),
+        .default({ times: ["03:00"], timezone: "America/Sao_Paulo" }),
     })
     .default({
       collection: { intervalHours: 4 },
-      scoreAndDeliver: { time: "03:00", timezone: "America/Sao_Paulo" },
+      scoreAndDeliver: { times: ["03:00"], timezone: "America/Sao_Paulo" },
     }),
   /**
    * docs/08-observability.md's alert thresholds. `consecutiveEmptyCollectionRuns`

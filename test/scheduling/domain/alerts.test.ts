@@ -184,7 +184,7 @@ describe("evaluateDeliveryOutcome", () => {
 
 describe("evaluateMissedRuns", () => {
   const config: MissedRunConfig = {
-    scoreAndDeliver: { time: "03:00", timezone: "America/Sao_Paulo" },
+    scoreAndDeliver: { times: ["03:00"], timezone: "America/Sao_Paulo" },
     collection: { intervalHours: 4 },
   };
 
@@ -265,6 +265,68 @@ describe("evaluateMissedRuns", () => {
     });
     const alerts = evaluateMissedRuns(now, lastDeliver, null, config);
     expect(alerts.some((a) => a.text.includes("collection run"))).toBe(true);
+  });
+
+  describe("multiple daily windows (ADR-009 Amendment 1)", () => {
+    const twoWindows: MissedRunConfig = {
+      scoreAndDeliver: {
+        times: ["05:00", "17:00"],
+        timezone: "America/Sao_Paulo",
+      },
+      collection: { intervalHours: 4 },
+    };
+
+    it("does not alert when only the earlier window has passed and it succeeded", () => {
+      // 08:00 America/Sao_Paulo = 11:00 UTC — past 05:00, not yet 17:00.
+      const now = new Date("2026-08-15T11:00:00Z");
+      const lastDeliver = run({
+        kind: "scoreAndDeliver",
+        finishedAt: new Date("2026-08-15T08:00:00Z"), // ~05:00 local
+      });
+      const lastCollect = run({ finishedAt: now });
+      const alerts = evaluateMissedRuns(
+        now,
+        lastDeliver,
+        lastCollect,
+        twoWindows,
+      );
+      expect(alerts.some((a) => a.text.includes("no digest"))).toBe(false);
+    });
+
+    it("alerts once the later window has passed even though the earlier one succeeded", () => {
+      // 18:00 America/Sao_Paulo = 21:00 UTC — past both 05:00 and 17:00.
+      const now = new Date("2026-08-15T21:00:00Z");
+      const lastDeliver = run({
+        kind: "scoreAndDeliver",
+        finishedAt: new Date("2026-08-15T08:00:00Z"), // only the 05:00 run
+      });
+      const lastCollect = run({ finishedAt: now });
+      const alerts = evaluateMissedRuns(
+        now,
+        lastDeliver,
+        lastCollect,
+        twoWindows,
+      );
+      const alert = alerts.find((a) => a.text.includes("no digest"));
+      expect(alert).toBeDefined();
+      expect(alert?.text).toContain("17:00");
+    });
+
+    it("does not alert once the later window has also succeeded", () => {
+      const now = new Date("2026-08-15T21:00:00Z");
+      const lastDeliver = run({
+        kind: "scoreAndDeliver",
+        finishedAt: new Date("2026-08-15T20:00:00Z"), // ~17:00 local
+      });
+      const lastCollect = run({ finishedAt: now });
+      const alerts = evaluateMissedRuns(
+        now,
+        lastDeliver,
+        lastCollect,
+        twoWindows,
+      );
+      expect(alerts.some((a) => a.text.includes("no digest"))).toBe(false);
+    });
   });
 });
 

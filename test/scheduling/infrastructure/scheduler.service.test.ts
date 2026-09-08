@@ -61,7 +61,7 @@ scoring:
   unknownTrackCapScore: 50
 schedule:
   collection: { intervalHours: 6 }
-  scoreAndDeliver: { time: "02:30", timezone: "America/Sao_Paulo" }
+  scoreAndDeliver: { times: ["02:30", "14:00"], timezone: "America/Sao_Paulo" }
 `,
     );
     writeFileSync(
@@ -112,7 +112,7 @@ skills:
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("registers a collection and a scoreAndDeliver cron job matching criteria.yaml", async () => {
+  it("registers a collection cron and one scoreAndDeliver cron per configured time (ADR-009 Amendment 1)", async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [SchedulingModule],
     }).compile();
@@ -129,13 +129,14 @@ skills:
     );
     const jobs = registry.getCronJobs();
     expect(jobs.has("collection")).toBe(true);
-    expect(jobs.has("scoreAndDeliver")).toBe(true);
+    expect(jobs.has("scoreAndDeliver:0")).toBe(true);
+    expect(jobs.has("scoreAndDeliver:1")).toBe(true);
 
     expect(jobs.get("collection")?.cronTime.source).toBe("0 */6 * * *");
-    expect(jobs.get("scoreAndDeliver")?.cronTime.source).toBe("30 02 * * *");
+    expect(jobs.get("scoreAndDeliver:0")?.cronTime.source).toBe("30 02 * * *");
+    expect(jobs.get("scoreAndDeliver:1")?.cronTime.source).toBe("00 14 * * *");
 
-    jobs.get("collection")?.stop();
-    jobs.get("scoreAndDeliver")?.stop();
+    for (const job of jobs.values()) job.stop();
     await moduleRef.close();
   });
 

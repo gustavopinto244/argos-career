@@ -35,8 +35,9 @@ import { RUN_LOCK } from "./run-lock.provider";
 /**
  * Turns `schedule.collection.intervalHours` into a standard 5-field cron
  * expression firing at minute 0 of every Nth hour — the same shape a crontab
- * entry for "every N hours" would use. `schedule.scoreAndDeliver.time` is
- * `HH:mm`, already validated by `CriteriaSchema`.
+ * entry for "every N hours" would use. Each entry in
+ * `schedule.scoreAndDeliver.times` is `HH:mm`, already validated (and
+ * deduplicated/sorted) by `CriteriaSchema`.
  */
 export function collectionCronExpression(intervalHours: number): string {
   return `0 */${intervalHours} * * *`;
@@ -122,17 +123,24 @@ export class SchedulerService implements OnModuleInit {
     });
     this.registry.addCronJob("collection", collectionJob);
 
-    const deliverJob = CronJob.from({
-      cronTime: deliverCronExpression(scoreAndDeliver.time),
-      timeZone: scoreAndDeliver.timezone,
-      onTick: () => void this.runScoreAndDeliverCycle(),
-      start: true,
+    // ADR-009 Amendment 1: one or more daily windows, each its own CronJob
+    // sharing the same `RunLock` key ("scoreAndDeliver") and handler — two
+    // windows landing back-to-back is exactly what the lock in
+    // `runScoreAndDeliverCycle` already guards against, so registering N
+    // independent jobs needs no new coordination.
+    scoreAndDeliver.times.forEach((time, index) => {
+      const deliverJob = CronJob.from({
+        cronTime: deliverCronExpression(time),
+        timeZone: scoreAndDeliver.timezone,
+        onTick: () => void this.runScoreAndDeliverCycle(),
+        start: true,
+      });
+      this.registry.addCronJob(`scoreAndDeliver:${index}`, deliverJob);
     });
-    this.registry.addCronJob("scoreAndDeliver", deliverJob);
 
     this.logger.log(
       `Scheduled: collection every ${collection.intervalHours}h, ` +
-        `scoreAndDeliver daily at ${scoreAndDeliver.time} ${scoreAndDeliver.timezone}.`,
+        `scoreAndDeliver daily at ${scoreAndDeliver.times.join(", ")} ${scoreAndDeliver.timezone}.`,
     );
   }
 
@@ -274,7 +282,7 @@ export class SchedulerService implements OnModuleInit {
   /**
    * Chained directly after the nightly cycle finishes, rather than a fourth
    * cron expression offset by some guessed number of minutes from
-   * `scoreAndDeliver.time` — that would race the actual run length instead
+   * `scoreAndDeliver.times` — that would race the actual run length instead
    * of following it. `executeDeliver` has already called `runsRepo.finish`
    * by the time control returns here — on success, on a failed send, and (as
    * of 2026-08-16) on a throw, which is the case this comment previously

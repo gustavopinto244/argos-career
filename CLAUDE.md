@@ -175,10 +175,14 @@ Scheduler → Collect (adapters) → Normalize → Dedup → Pre-filter
 
 **Ports:** `CollectorPort`, `ScorerPort`, `NotifierPort`.
 
-**Cadence** (ADR-009): collection runs **every few hours**, low volume, no LLM.
-Scoring and delivery run **once nightly**, in a configured off-peak window
-(default `03:00 America/Sao_Paulo`) — the only window the model runs in, and
-the only time the digest is delivered. **Daily**, not twice a week.
+**Cadence** (ADR-009, Amendment 1): collection runs **every few hours**, low
+volume, no LLM. Scoring and delivery run in **one or more configured daily
+windows** (default `["05:00", "17:00"]` America/Sao_Paulo) — the only windows
+the model runs in, and the only times the digest is delivered. Confining this
+to a single nightly window was ADR-009's original call, made when the scorer
+was a GPU-less local model that could contend with Atlas's daytime traffic;
+`ApiScorer` (ADR-016) removed that constraint, so the window count is now
+just configuration. **Daily**, not twice a week.
 
 **Dedup:** `sha256(normalize(company) + normalize(title) + normalize(city))`,
 where normalize = lowercase, strip accents, strip punctuation, collapse
