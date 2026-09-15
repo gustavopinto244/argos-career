@@ -24,12 +24,9 @@ services:
     container_name: argos-career
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "${ATLAS_TAILSCALE_IP}:${API_PORT:-3000}:${API_PORT:-3000}"
     volumes:
       - argos-data:/app/data
       - argos-backups:/app/backups
-      - ./config/profile.yaml:/app/config/profile.yaml:ro
 
 volumes:
   argos-data:

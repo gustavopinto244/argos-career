@@ -55,7 +55,6 @@ import { hashProfile } from "../profile/domain/profile-hash";
 import { ScorerPort } from "../scoring/domain/ports/scorer.port";
 import { EMPTY_RECOMMENDATION } from "../scoring/domain/recommendation";
 import { scoreFailureOutcome, Verdict } from "../scoring/domain/types";
-import { buildScorer } from "../scoring/infrastructure/build-scorer";
 import { resolveScoringTracks } from "../scoring/infrastructure/api-scorer";
 import { computeScore } from "../scoring/domain/score";
 import { buildScoringConfig } from "../scoring/infrastructure/scoring-config";
@@ -89,6 +88,8 @@ import {
 import { recurringGapsFor } from "../market/domain/recurring-gaps";
 import { GapAnalysisEntry } from "../market/domain/types";
 import { ProfileTrack } from "../profile/domain/profile";
+import { loadJobRadarConfig } from "../radar/infrastructure/job-radar-config-loader";
+import { deliverJobRadar } from "../radar/application/deliver-job-radar";
 
 export interface CollectOutcome {
   readonly runId: string;
@@ -2028,11 +2029,11 @@ async function collectCommand(args: string[]): Promise<void> {
   };
 
   // No flags means "run the configured cycle" — the same queries the cron
-  // issues (`config/criteria.yaml`, `collection.queries`), so a manual run
+  // issues (`config/job-radar.yaml`, `collection.queries`), so a manual run
   // and a scheduled one exercise the identical path. Any flag makes it a
   // deliberate one-off that overrides the configuration.
-  const criteria = loadCriteria(
-    process.env.CRITERIA_PATH ?? "./config/criteria.yaml",
+  const criteria = loadJobRadarConfig(
+    process.env.JOB_RADAR_CONFIG_PATH ?? "./config/job-radar.yaml",
   );
   const isAdHoc = Object.values(adHoc).some((value) => value !== undefined);
   const queries = isAdHoc ? [adHoc] : criteria.collection.queries;
@@ -2124,34 +2125,12 @@ function dedupCommand(args: string[]): void {
 }
 
 async function deliverCommand(): Promise<void> {
-  const criteria = loadCriteria(
-    process.env.CRITERIA_PATH ?? "./config/criteria.yaml",
+  const config = loadJobRadarConfig(
+    process.env.JOB_RADAR_CONFIG_PATH ?? "./config/job-radar.yaml",
   );
-  const profile = loadProfile(
-    process.env.PROFILE_PATH ?? "./config/profile.yaml",
-  );
-
   const db = openDatabase();
-  const built = buildScorer(db, criteria, profile);
-  if (!built.ok) {
-    console.error(`deliver: ${built.error}`);
-    process.exitCode = 1;
-    return;
-  }
-  const { scorer, getUsage } = built;
-
-  const notifier = new TelegramNotifier(loadTelegramConfig(), fetch, {
-    deliveryStore: new DeliveryOperationsRepository(db),
-  });
-
-  const outcome = await executeDeliver(
-    db,
-    scorer,
-    notifier,
-    criteria,
-    profile,
-    getUsage,
-  );
+  const notifier = new TelegramNotifier(loadTelegramConfig(), fetch);
+  const outcome = await deliverJobRadar(db, notifier, config);
 
   if (outcome.error) {
     console.error(`deliver (run ${outcome.runId}) failed: ${outcome.error}`);
@@ -2160,8 +2139,7 @@ async function deliverCommand(): Promise<void> {
   }
 
   console.log(
-    `deliver (run ${outcome.runId}): ${outcome.filtered} passed the pre-filter, ` +
-      `${outcome.scored} scored, ${outcome.delivered} delivered`,
+    `deliver (run ${outcome.runId}): ${outcome.delivered} new posting(s) delivered`,
   );
 }
 

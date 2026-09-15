@@ -1,0 +1,63 @@
+# Generic job-search setup. Change only the queries and label when the target
+# position and location are defined; no candidate profile is used by this app.
+search:
+  label: "Busca de vagas"
+  location: "Brasil e remoto"
+
+collection:
+  queries:
+    - source: gupy
+      jobName: vaga
+      maxResults: 50
+    # Explicit searches keep QA and support vacancies from depending on their
+    # position inside the broad, capped result set above.
+    - source: gupy
+      jobName: QA
+      maxResults: 50
+    - source: gupy
+      jobName: suporte
+      maxResults: 50
+    - source: ciee
+    - source: infojobs
+      jobName: vaga
+      isRemoteWork: true
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: QA
+      isRemoteWork: true
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: suporte
+      isRemoteWork: true
+      maxAgeDays: 7
+    - source: nerdin
+      jobName: vaga
+    - source: nerdin
+      jobName: QA
+    - source: nerdin
+      jobName: suporte
+    - source: solides
+      jobName: vaga
+    - source: solides
+      jobName: QA
+    - source: solides
+      jobName: suporte
+    - source: vagas
+      jobName: vaga
+  queryIntervalMs: 1500
+  recencyDays: 1
+  backfillDays: 7
+
+schedule:
+  collection:
+    intervalHours: 4
+  delivery:
+    times: ["08:00"]
+    timezone: America/Sao_Paulo
+
+delivery:
+  requiredCategories:
+    - label: QA
+      terms: [QA, quality assurance, teste, testes, software tester]
+    - label: Suporte
+      terms: [suporte, support, help desk, helpdesk, service desk]
