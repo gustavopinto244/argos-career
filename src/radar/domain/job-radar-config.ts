@@ -29,16 +29,36 @@ export const JobRadarConfigSchema = z.strictObject({
   }),
   collection: CollectionSchema,
   schedule: ScheduleSchema,
-  delivery: z.strictObject({
-    requiredCategories: z
-      .array(
-        z.strictObject({
-          label: z.string().min(1),
-          terms: z.array(z.string().min(1)).min(1),
-        }),
-      )
-      .default([]),
-  }),
+  delivery: z
+    .strictObject({
+      onsiteCity: z.string().min(1).default("Joinville"),
+      titleTerms: z
+        .array(z.string().min(1))
+        .min(1)
+        .default([
+          "analista",
+          "auxiliar",
+          "assistente",
+          "negociador",
+          "atendente",
+          "recepcionista",
+          "operador",
+          "vendedor",
+        ]),
+    })
+    .default({
+      onsiteCity: "Joinville",
+      titleTerms: [
+        "analista",
+        "auxiliar",
+        "assistente",
+        "negociador",
+        "atendente",
+        "recepcionista",
+        "operador",
+        "vendedor",
+      ],
+    }),
 });
 
 export type JobRadarConfig = z.infer<typeof JobRadarConfigSchema>;

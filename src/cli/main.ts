@@ -73,6 +73,11 @@ import {
   TelegramNotifier,
   TextNotifier,
 } from "../delivery/infrastructure/telegram-notifier";
+import {
+  TelegramSubscribers,
+  SubscriberNotifier,
+  pollSubscribers,
+} from "../radar/infrastructure/telegram-subscribers";
 import { loadTelegramConfig } from "../delivery/infrastructure/telegram-config";
 import { Taxonomy } from "../market/domain/taxonomy";
 import { loadTaxonomy } from "../market/infrastructure/taxonomy-loader";
@@ -2003,7 +2008,7 @@ export function executeListPostings(
 }
 
 function openDatabase(): Db {
-  const databasePath = process.env.DATABASE_PATH ?? "./data/argos.db";
+  const databasePath = process.env.DATABASE_PATH ?? "./data/job-radar.db";
   const db = createDatabase(databasePath);
   runMigrations(db);
   return db;
@@ -2129,7 +2134,11 @@ async function deliverCommand(): Promise<void> {
     process.env.JOB_RADAR_CONFIG_PATH ?? "./config/job-radar.yaml",
   );
   const db = openDatabase();
-  const notifier = new TelegramNotifier(loadTelegramConfig(), fetch);
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not set");
+  const subscribers = new TelegramSubscribers(db);
+  await pollSubscribers(subscribers, token);
+  const notifier = new SubscriberNotifier(subscribers, token);
   const outcome = await deliverJobRadar(db, notifier, config);
 
   if (outcome.error) {

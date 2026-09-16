@@ -1,63 +1,172 @@
-# Generic job-search setup. Change only the queries and label when the target
-# position and location are defined; no candidate profile is used by this app.
+# Vagas generalistas sem exigência de faculdade.
 search:
-  label: "Busca de vagas"
-  location: "Brasil e remoto"
-
+  label: "Vagas generalistas sem faculdade"
+  location: "Presencial em Joinville ou remoto no Brasil"
 collection:
   queries:
     - source: gupy
-      jobName: vaga
-      maxResults: 50
-    # Explicit searches keep QA and support vacancies from depending on their
-    # position inside the broad, capped result set above.
-    - source: gupy
-      jobName: QA
+      jobName: analista
+      city: Joinville
+      isRemoteWork: false
       maxResults: 50
     - source: gupy
-      jobName: suporte
+      jobName: analista
+      isRemoteWork: true
       maxResults: 50
-    - source: ciee
+    - source: gupy
+      jobName: auxiliar
+      city: Joinville
+      isRemoteWork: false
+      maxResults: 50
+    - source: gupy
+      jobName: auxiliar
+      isRemoteWork: true
+      maxResults: 50
+    - source: gupy
+      jobName: assistente
+      city: Joinville
+      isRemoteWork: false
+      maxResults: 50
+    - source: gupy
+      jobName: assistente
+      isRemoteWork: true
+      maxResults: 50
+    - source: gupy
+      jobName: negociador
+      city: Joinville
+      isRemoteWork: false
+      maxResults: 50
+    - source: gupy
+      jobName: negociador
+      isRemoteWork: true
+      maxResults: 50
+    - source: gupy
+      jobName: atendente
+      city: Joinville
+      isRemoteWork: false
+      maxResults: 50
+    - source: gupy
+      jobName: atendente
+      isRemoteWork: true
+      maxResults: 50
+    - source: gupy
+      jobName: recepcionista
+      city: Joinville
+      isRemoteWork: false
+      maxResults: 50
+    - source: gupy
+      jobName: recepcionista
+      isRemoteWork: true
+      maxResults: 50
+    - source: gupy
+      jobName: operador
+      city: Joinville
+      isRemoteWork: false
+      maxResults: 50
+    - source: gupy
+      jobName: operador
+      isRemoteWork: true
+      maxResults: 50
+    - source: gupy
+      jobName: vendedor
+      city: Joinville
+      isRemoteWork: false
+      maxResults: 50
+    - source: gupy
+      jobName: vendedor
+      isRemoteWork: true
+      maxResults: 50
     - source: infojobs
-      jobName: vaga
+      jobName: analista
+      city: Joinville
+      isRemoteWork: false
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: analista
       isRemoteWork: true
       maxAgeDays: 7
     - source: infojobs
-      jobName: QA
+      jobName: auxiliar
+      city: Joinville
+      isRemoteWork: false
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: auxiliar
       isRemoteWork: true
       maxAgeDays: 7
     - source: infojobs
-      jobName: suporte
+      jobName: assistente
+      city: Joinville
+      isRemoteWork: false
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: assistente
       isRemoteWork: true
       maxAgeDays: 7
-    - source: nerdin
-      jobName: vaga
-    - source: nerdin
-      jobName: QA
-    - source: nerdin
-      jobName: suporte
-    - source: solides
-      jobName: vaga
-    - source: solides
-      jobName: QA
-    - source: solides
-      jobName: suporte
-    - source: vagas
-      jobName: vaga
+    - source: infojobs
+      jobName: negociador
+      city: Joinville
+      isRemoteWork: false
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: negociador
+      isRemoteWork: true
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: atendente
+      city: Joinville
+      isRemoteWork: false
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: atendente
+      isRemoteWork: true
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: recepcionista
+      city: Joinville
+      isRemoteWork: false
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: recepcionista
+      isRemoteWork: true
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: operador
+      city: Joinville
+      isRemoteWork: false
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: operador
+      isRemoteWork: true
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: vendedor
+      city: Joinville
+      isRemoteWork: false
+      maxAgeDays: 7
+    - source: infojobs
+      jobName: vendedor
+      isRemoteWork: true
+      maxAgeDays: 7
   queryIntervalMs: 1500
   recencyDays: 1
   backfillDays: 7
-
 schedule:
   collection:
     intervalHours: 4
   delivery:
-    times: ["08:00"]
+    times: ["07:00", "14:00"]
     timezone: America/Sao_Paulo
-
 delivery:
-  requiredCategories:
-    - label: QA
-      terms: [QA, quality assurance, teste, testes, software tester]
-    - label: Suporte
-      terms: [suporte, support, help desk, helpdesk, service desk]
+  onsiteCity: Joinville
+  titleTerms:
+    [
+      analista,
+      auxiliar,
+      assistente,
+      negociador,
+      atendente,
+      recepcionista,
+      operador,
+      vendedor,
+    ]

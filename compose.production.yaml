@@ -1,33 +1,24 @@
-name: argos-career
+name: job-radar
 
-# Scheduling (ADR-009) runs inside the process via @nestjs/schedule — the
-# HTTP API (M9, ADR-017) is a second, independent reason to run: Hermes,
-# on a different machine, reaching in over Tailscale.
-#
-# The port is published bound to Atlas's Tailscale interface IP
-# (${ATLAS_TAILSCALE_IP}, from .env — a re-keyed Tailscale identity changes
-# it, so it is never hardcoded), never to 0.0.0.0. A second, independent
-# control on top of ApiKeyGuard and UFW: even if either is ever
-# misconfigured, the port itself is not bound to a publicly reachable
-# interface.
-#
-# Manual backup/restore (npm run backup / npm run restore) run from a plain
-# host-side checkout, not through this container — scripts/ and the tsx
-# devDependency are intentionally not part of the runtime image (Dockerfile).
-# Rehearsed this way for real on Atlas, M8 part 2/3.
 services:
-  argos-career:
+  job-radar:
     build:
       context: .
       dockerfile: Dockerfile
-    image: argos-career:local
-    container_name: argos-career
+    image: job-radar:local
+    container_name: job-radar
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.job-radar
+    environment:
+      DATABASE_PATH: /app/data/job-radar.db
+      JOB_RADAR_CONFIG_PATH: /app/config/job-radar.yaml
     volumes:
-      - argos-data:/app/data
-      - argos-backups:/app/backups
+      - radar-data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
-  argos-data:
-  argos-backups:
+  radar-data:

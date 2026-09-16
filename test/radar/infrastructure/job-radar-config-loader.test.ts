@@ -3,27 +3,31 @@ import { describe, expect, it } from "vitest";
 import { loadJobRadarConfig } from "../../../src/radar/infrastructure/job-radar-config-loader";
 
 describe("config/job-radar.yaml", () => {
-  const loadConfig = () =>
-    loadJobRadarConfig(join(process.cwd(), "config", "job-radar.yaml"));
-
-  it("loads and validates against JobRadarConfigSchema", () => {
-    expect(loadConfig).not.toThrow();
-  });
-
-  it("explicitly searches for QA and support vacancies", () => {
-    const terms = loadConfig().collection.queries.flatMap((query) =>
-      query.jobName ? [query.jobName.toLocaleLowerCase("pt-BR")] : [],
+  it("targets generalist roles in Joinville and remote Brazil", () => {
+    const config = loadJobRadarConfig(
+      join(process.cwd(), "config", "job-radar.yaml"),
     );
-
-    expect(terms).toContain("qa");
-    expect(terms).toContain("suporte");
-  });
-
-  it("reserves delivery slots for QA and support", () => {
-    const categories = loadConfig().delivery.requiredCategories.map(
-      ({ label }) => label,
-    );
-
-    expect(categories).toEqual(["QA", "Suporte"]);
+    expect(config.schedule.delivery.times).toEqual(["07:00", "14:00"]);
+    expect(config.delivery.onsiteCity).toBe("Joinville");
+    for (const term of ["analista", "auxiliar", "assistente", "negociador"]) {
+      expect(
+        config.collection.queries.some(
+          (q) =>
+            q.jobName === term &&
+            q.city === "Joinville" &&
+            q.isRemoteWork === false,
+        ),
+      ).toBe(true);
+      expect(
+        config.collection.queries.some(
+          (q) => q.jobName === term && q.isRemoteWork === true && !q.city,
+        ),
+      ).toBe(true);
+    }
+    expect(
+      config.collection.queries.every((q) =>
+        config.delivery.titleTerms.includes(q.jobName!),
+      ),
+    ).toBe(true);
   });
 });

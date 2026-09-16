@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { CronJob } from "cron";
 import { executeCollect, executeDedup } from "../../cli/main";
@@ -8,8 +14,13 @@ import {
   runMigrations,
 } from "../../persistence/infrastructure/db";
 import { collectorFor } from "../../posting/infrastructure/collector-registry";
-import { TelegramNotifier } from "../../delivery/infrastructure/telegram-notifier";
-import { loadTelegramConfig } from "../../delivery/infrastructure/telegram-config";
+import { TextNotifier } from "../../delivery/infrastructure/telegram-notifier";
+import { TelegramConfigError } from "../../delivery/infrastructure/telegram-config";
+import {
+  TelegramSubscribers,
+  SubscriberNotifier,
+  pollSubscribers,
+} from "../../radar/infrastructure/telegram-subscribers";
 import { RunLock, runExclusive } from "../domain/run-lock";
 import { RUN_LOCK } from "./run-lock.provider";
 import { JobRadarConfig } from "../../radar/domain/job-radar-config";
@@ -50,13 +61,15 @@ export function deliverCronExpression(time: string): string {
  * on the next container restart, not mid-batch.
  */
 @Injectable()
-export class SchedulerService implements OnModuleInit {
+export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SchedulerService.name);
   // Definite-assignment (`!`), not `readonly` — assigned in `onModuleInit`,
   // not the constructor; see the comment below for why.
   private db!: Db;
   private criteria!: JobRadarConfig;
-  private notifier!: TelegramNotifier;
+  private notifier!: TextNotifier;
+  private subscriberTimer?: ReturnType<typeof setInterval>;
+  private polling = false;
 
   // Explicit @Inject rather than relying on reflected constructor-parameter
   // metadata: `npm run dev` runs this under `tsx` (esbuild), whose
@@ -76,12 +89,32 @@ export class SchedulerService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.db = createDatabase(process.env.DATABASE_PATH ?? "./data/argos.db");
+    this.db = createDatabase(
+      process.env.DATABASE_PATH ?? "./data/job-radar.db",
+    );
     runMigrations(this.db);
     this.criteria = loadJobRadarConfig(
       process.env.JOB_RADAR_CONFIG_PATH ?? "./config/job-radar.yaml",
     );
-    this.notifier = new TelegramNotifier(loadTelegramConfig(), fetch);
+    const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    if (!token) throw new TelegramConfigError("TELEGRAM_BOT_TOKEN is not set");
+    const subscribers = new TelegramSubscribers(this.db);
+    this.notifier = new SubscriberNotifier(subscribers, token);
+    const poll = async () => {
+      if (this.polling) return;
+      this.polling = true;
+      try {
+        await pollSubscribers(subscribers, token);
+      } catch {
+        this.logger.warn(
+          "Não foi possível atualizar os assinantes do Telegram",
+        );
+      } finally {
+        this.polling = false;
+      }
+    };
+    this.subscriberTimer = setInterval(() => void poll(), 10_000);
+    this.subscriberTimer.unref();
 
     const { collection, delivery } = this.criteria.schedule;
 
@@ -125,6 +158,10 @@ export class SchedulerService implements OnModuleInit {
    * run history that a skipped tick never changes, so there is nothing new
    * to evaluate.
    */
+  onModuleDestroy(): void {
+    if (this.subscriberTimer) clearInterval(this.subscriberTimer);
+  }
+
   private async runCollectionCycle(): Promise<void> {
     // Preserves the original try/catch's shape: a thrown collect means
     // dedup is skipped for this tick too, not attempted against whatever

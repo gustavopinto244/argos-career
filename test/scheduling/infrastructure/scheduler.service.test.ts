@@ -48,9 +48,7 @@ schedule:
   collection: { intervalHours: 6 }
   delivery: { times: ["02:30", "14:00"], timezone: America/Sao_Paulo }
 delivery:
-  requiredCategories:
-    - label: QA
-      terms: [QA, testes]
+  onsiteCity: Joinville
 `,
     );
 

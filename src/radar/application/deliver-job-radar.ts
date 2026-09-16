@@ -3,7 +3,7 @@ import { PostingsRepository } from "../../persistence/infrastructure/postings-re
 import { RunsRepository } from "../../persistence/infrastructure/runs-repository";
 import { TextNotifier } from "../../delivery/infrastructure/telegram-notifier";
 import { Posting } from "../../posting/domain/posting";
-import { keywordMatchesText } from "../../prefilter/domain/title-match";
+import { isSimpleJobAllowed } from "../domain/simple-job-filter";
 import { JobRadarConfig } from "../domain/job-radar-config";
 import { renderJobRadarText } from "../domain/render-job-radar";
 
@@ -13,41 +13,22 @@ export interface JobRadarDeliveryOutcome {
   readonly error?: string;
 }
 
+export const MAX_VACANCIES_PER_MESSAGE = 20;
+
 function newestFirst(a: Posting, b: Posting): number {
   const aDate = (a.publishedAt ?? a.firstSeenAt).getTime();
   const bDate = (b.publishedAt ?? b.firstSeenAt).getTime();
   return bDate - aDate;
 }
 
-/**
- * Places one vacancy from each configured category first when available, then
- * includes every remaining vacancy in newest-first order.
- */
+/** Filters eligibility before ordering vacancies for delivery. */
 export function selectJobRadarPostings(
   postings: readonly Posting[],
   config: JobRadarConfig["delivery"],
 ): Posting[] {
-  const ordered = [...postings].sort(newestFirst);
-  const selected: Posting[] = [];
-  const selectedFingerprints = new Set<string>();
-
-  for (const category of config.requiredCategories) {
-    const match = ordered.find(
-      (posting) =>
-        !selectedFingerprints.has(posting.fingerprint) &&
-        category.terms.some((term) => keywordMatchesText(posting.title, term)),
-    );
-    if (match) {
-      selected.push(match);
-      selectedFingerprints.add(match.fingerprint);
-    }
-  }
-
-  for (const posting of ordered) {
-    if (!selectedFingerprints.has(posting.fingerprint)) selected.push(posting);
-  }
-
-  return selected;
+  return postings
+    .filter((posting) => isSimpleJobAllowed(posting, config))
+    .sort(newestFirst);
 }
 
 /**
@@ -70,39 +51,53 @@ export async function deliverJobRadar(
   );
   const selected = selectJobRadarPostings(claimed, config.delivery);
 
+  let delivered = 0;
   try {
-    const result = await notifier.sendText(
-      renderJobRadarText({
-        label: config.search.label,
-        location: config.search.location,
-        postings: selected,
-      }),
-    );
-    if (!result.ok) {
-      postings.releaseUnresolvedClaims(runId);
-      runs.finish(runId, now(), "failed", {
-        deliveredCount: 0,
-        failureReason: result.error.message,
-      });
-      return { runId, delivered: 0, error: result.error.message };
+    const batches: Posting[][] = [];
+    for (
+      let index = 0;
+      index < selected.length;
+      index += MAX_VACANCIES_PER_MESSAGE
+    ) {
+      batches.push(selected.slice(index, index + MAX_VACANCIES_PER_MESSAGE));
     }
-
+    if (!batches.length) batches.push([]);
+    for (const [index, batch] of batches.entries()) {
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, 1100));
+      const result = await notifier.sendText(
+        renderJobRadarText({
+          label: config.search.label,
+          location: config.search.location,
+          postings: batch,
+        }),
+      );
+      if (!result.ok) {
+        postings.releaseUnresolvedClaims(runId);
+        runs.finish(runId, now(), "failed", {
+          deliveredCount: delivered,
+          failureReason: result.error.message,
+        });
+        return { runId, delivered, error: result.error.message };
+      }
+      postings.markNotifiedMany(
+        batch.map((posting) => posting.fingerprint),
+        now(),
+      );
+      delivered += batch.length;
+    }
     const deliveredAt = now();
-    postings.markNotifiedMany(
-      selected.map((posting) => posting.fingerprint),
-      deliveredAt,
-    );
+    postings.releaseUnresolvedClaims(runId);
     runs.finish(runId, deliveredAt, "success", {
-      deliveredCount: selected.length,
-      filteredCount: claimed.length,
+      deliveredCount: delivered,
+      filteredCount: selected.length,
       scoredCount: 0,
     });
-    return { runId, delivered: selected.length };
+    return { runId, delivered };
   } catch (cause) {
     postings.releaseUnresolvedClaims(runId);
     const message = cause instanceof Error ? cause.message : String(cause);
     runs.finish(runId, now(), "failed", {
-      deliveredCount: 0,
+      deliveredCount: delivered,
       failureReason: message,
     });
     throw cause;

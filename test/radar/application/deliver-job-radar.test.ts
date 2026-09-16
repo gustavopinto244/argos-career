@@ -35,7 +35,7 @@ const config: JobRadarConfig = {
     collection: { intervalHours: 4 },
     delivery: { times: ["08:00"], timezone: "America/Sao_Paulo" },
   },
-  delivery: { requiredCategories: [] },
+  delivery: { onsiteCity: "Joinville", titleTerms: ["assistente", "analista"] },
 };
 
 function posting(id: string, firstSeenAt: Date): Posting {
@@ -44,7 +44,7 @@ function posting(id: string, firstSeenAt: Date): Posting {
     sourceId: id,
     fingerprint: `gupy:${id}`,
     company: `Empresa ${id}`,
-    title: `Vaga ${id}`,
+    title: `Assistente ${id}`,
     location: { kind: "known", city: "Rio de Janeiro" },
     workMode: "remote",
     seniority: null,
@@ -52,7 +52,8 @@ function posting(id: string, firstSeenAt: Date): Posting {
     applicationDeadline: null,
     publishedAt: firstSeenAt,
     sourceUrl: `https://example.test/${id}`,
-    description: null,
+    description:
+      "Ensino médio completo. Atendimento ao cliente e informática básica.",
     country: "BR",
     collectedAt: firstSeenAt,
     firstSeenAt,
@@ -79,47 +80,88 @@ describe("deliverJobRadar", () => {
 
     expect(first.delivered).toBe(2);
     expect(second.delivered).toBe(0);
-    expect(messages[0]).toContain("Vaga new");
+    expect(messages[0]).toContain("Assistente new");
     expect(messages[0]).not.toContain("Compatibilidade");
-    expect(messages[0]).toContain("Vaga old");
+    expect(messages[0]).toContain("Assistente old");
     expect(messages[1]).toContain("Nenhuma vaga nova");
   });
 
-  it("includes each required category when matching vacancies are available", async () => {
+  it("splits 41 vacancies into messages of 20, 20 and 1", async () => {
     const repository = new PostingsRepository(db);
-    repository.upsert(posting("other", new Date("2026-01-03T10:00:00Z")));
-    repository.upsert({
-      ...posting("support", new Date("2026-01-02T10:00:00Z")),
-      title: "Analista de Suporte Técnico",
-    });
-    repository.upsert({
-      ...posting("qa", new Date("2026-01-01T10:00:00Z")),
-      title: "Analista de Testes de Software",
-    });
+    for (let index = 0; index < 41; index++)
+      repository.upsert(posting(String(index), new Date("2026-01-01")));
     const messages: string[] = [];
-    const notifier = {
-      sendText: async (text: string) => {
-        messages.push(text);
-        return { ok: true as const };
+    const outcome = await deliverJobRadar(
+      db,
+      {
+        sendText: async (text) => {
+          messages.push(text);
+          return { ok: true as const };
+        },
       },
-    };
-
-    const outcome = await deliverJobRadar(db, notifier, {
-      ...config,
-      delivery: {
-        requiredCategories: [
-          { label: "QA", terms: ["QA", "testes"] },
-          { label: "Suporte", terms: ["suporte", "support"] },
-        ],
-      },
-    });
-
-    expect(outcome.delivered).toBe(3);
-    expect(messages[0]).toContain("Analista de Testes de Software");
-    expect(messages[0]).toContain("Analista de Suporte Técnico");
-    expect(messages[0]).toContain("Vaga other");
-    expect(messages[0]!.indexOf("Analista de Testes de Software")).toBeLessThan(
-      messages[0]!.indexOf("Vaga other"),
+      config,
     );
+    expect(outcome.delivered).toBe(41);
+    expect(
+      messages.map((text) => (text.match(/Cargo:/g) ?? []).length),
+    ).toEqual([20, 20, 1]);
+    expect(repository.findUnnotified()).toHaveLength(0);
+  });
+
+  it("keeps only the failed batch pending after partial delivery", async () => {
+    const repository = new PostingsRepository(db);
+    for (let index = 0; index < 21; index++)
+      repository.upsert(posting(String(index), new Date("2026-01-01")));
+    let sends = 0;
+    const outcome = await deliverJobRadar(
+      db,
+      {
+        sendText: async () =>
+          ++sends === 1
+            ? { ok: true as const }
+            : { ok: false as const, error: { message: "offline" } },
+      },
+      config,
+    );
+    expect(outcome.delivered).toBe(20);
+    expect(outcome.error).toBe("offline");
+    expect(repository.claimForScoring("retry", new Date())).toHaveLength(1);
+  });
+
+  it("filters rejected vacancies, releases their claims and retries failed delivery", async () => {
+    const repository = new PostingsRepository(db);
+    repository.upsert(posting("eligible", new Date("2026-01-02")));
+    repository.upsert({
+      ...posting("degree", new Date("2026-01-03")),
+      description: "Ensino médio completo. Superior obrigatório.",
+    });
+    const failed = await deliverJobRadar(
+      db,
+      {
+        sendText: async () => ({
+          ok: false as const,
+          error: { message: "offline" },
+        }),
+      },
+      config,
+    );
+    expect(failed.delivered).toBe(0);
+    const messages: string[] = [];
+    const result = await deliverJobRadar(
+      db,
+      {
+        sendText: async (text: string) => {
+          messages.push(text);
+          return { ok: true as const };
+        },
+      },
+      config,
+    );
+    expect(result.delivered).toBe(1);
+    expect(messages[0]).toContain("Assistente eligible");
+    expect(messages[0]).not.toContain("Assistente degree");
+    expect(
+      repository.claimForScoring("next", new Date()).map((p) => p.sourceId),
+    ).toEqual(["degree"]);
   });
 });

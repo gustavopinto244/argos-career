@@ -14,8 +14,8 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node --env-file-if-exists=.env dist/main.js",
-    "cli": "tsx --env-file-if-exists=.env src/cli/main.ts",
+    "start": "node --env-file=.env.job-radar dist/main.js",
+    "cli": "tsx --env-file=.env.job-radar src/cli/main.ts",
     "fixture:gupy": "tsx scripts/fixture-gupy.ts",
     "fixture:ciee": "tsx scripts/fixture-ciee.ts",
     "fixture:solides": "tsx scripts/fixture-solides.ts",
