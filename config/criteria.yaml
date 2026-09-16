@@ -34,6 +34,55 @@
 # -- corrected after measuring, not left as the first guess.
 collection:
   queries:
+    # Explicit QA and IT-support discovery, retaining internship/location gates.
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: QA
+      city: Rio de Janeiro
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: QA
+      isRemoteWork: true
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: testes de software
+      city: Rio de Janeiro
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: testes de software
+      isRemoteWork: true
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: suporte técnico
+      city: Rio de Janeiro
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: suporte técnico
+      isRemoteWork: true
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: help desk
+      city: Rio de Janeiro
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: help desk
+      isRemoteWork: true
+    - source: infojobs
+      jobName: estágio QA
+      maxAgeDays: 7
+      city: Rio de Janeiro
+    - source: infojobs
+      jobName: estágio QA
+      maxAgeDays: 7
+      isRemoteWork: true
+    - source: infojobs
+      jobName: estágio suporte técnico
+      maxAgeDays: 7
+      city: Rio de Janeiro
+    - source: infojobs
+      jobName: estágio suporte técnico
+      maxAgeDays: 7
+      isRemoteWork: true
     - source: gupy
       type: vacancy_type_internship
       jobName: estágio
@@ -545,6 +594,11 @@ maxFutureSkewDays: 1
 # leaves it unknown (trackWeights.unknown), not rejected.
 tracks:
   dev:
+    - qa
+    - quality assurance
+    - testes de software
+    - teste de software
+    - software tester
     - backend
     - back-end
     - back end
@@ -641,6 +695,10 @@ tracks:
     - cibersegurança
     - ciber
   automation:
+    - help desk
+    - helpdesk
+    - suporte de ti
+    - suporte em ti
     - automação
     - automation
     - devops
@@ -659,9 +717,8 @@ tracks:
     # "suporte técnico" 3. Placed under automation (0.7), not security
     # (1.0) -- these are IT-operations-flavored, not information-security
     # work, and CLAUDE.md's own priority split already puts
-    # infrastructure/automation a tier below security. "help desk" and
-    # "helpdesk" measured zero matches on the current corpus -- not added,
-    # per ADR-011's discipline of only listing measured, non-zero terms.
+    # infrastructure/automation a tier below security. Help-desk variants
+    # are now included above to support the explicit support searches.
     - ti
     - tecnologia da informação
     - suporte a sistemas
