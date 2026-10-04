@@ -9,7 +9,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const ENDPOINT = "https://employability-portal.gupy.io/api/v1/jobs";
+const ENDPOINT = "https://portal.gupy.io/api/job-search/jobs";
 const USER_AGENT =
   "ArgosCareer/0.1.0 (+https://github.com/gustavopinto244/ArgosCareer; personal internship search bot)";
 const OUTPUT_PATH = join(__dirname, "..", "test", "fixtures", "gupy-raw.json");

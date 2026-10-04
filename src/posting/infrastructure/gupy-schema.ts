@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Fitted to the response actually observed from
- * `https://employability-portal.gupy.io/api/v1/jobs` — not a guess. Captured
+ * `https://portal.gupy.io/api/job-search/jobs` — not a guess. Captured
  * with `npm run fixture:gupy`; see `test/fixtures/gupy-jobs.json` for the
  * curated, committed sample and its provenance note.
  *

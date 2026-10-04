@@ -8,7 +8,11 @@ import { FetchedBody, fetchWithDeadline } from "./fetch-with-deadline";
 import { GupyJobSchema, GupyResponseEnvelopeSchema } from "./gupy-schema";
 
 const SOURCE = "gupy";
-const ENDPOINT = "https://employability-portal.gupy.io/api/v1/jobs";
+// Gupy retired the old employability-portal `/api/v1/jobs` route on
+// 2026-10-01 (it now returns 404). This is the unauthenticated endpoint used
+// by the current public portal itself; confirmed from the portal's network
+// traffic and against Atlas with this collector's honest User-Agent.
+const ENDPOINT = "https://portal.gupy.io/api/job-search/jobs";
 
 /**
  * Identifies what this is, honestly — never forged to imitate a browser

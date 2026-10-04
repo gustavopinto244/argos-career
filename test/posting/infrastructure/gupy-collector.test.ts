@@ -233,6 +233,37 @@ describe("GupyCollector — successful collection", () => {
     expect(userAgent).not.toMatch(/Mozilla|Chrome|Safari/);
   });
 
+  it("uses the current public portal endpoint and preserves its query contract", async () => {
+    const fetchImpl = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit) =>
+        jsonResponse({ data: [] }),
+    );
+    const collector = new GupyCollector({ fetchImpl, ...FAST_OPTIONS });
+
+    await collector.collect({
+      jobName: "estágio backend",
+      city: "Rio de Janeiro",
+      type: "vacancy_type_internship",
+      isRemoteWork: true,
+      pageSize: 7,
+      maxResults: 7,
+    });
+
+    const call = fetchImpl.mock.calls[0];
+    if (!call) throw new Error("fetchImpl was not called");
+    const url = new URL(String(call[0]));
+    expect(url.origin).toBe("https://portal.gupy.io");
+    expect(url.pathname).toBe("/api/job-search/jobs");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      jobName: "estágio backend",
+      city: "Rio de Janeiro",
+      type: "vacancy_type_internship",
+      isRemoteWork: "true",
+      limit: "7",
+      offset: "0",
+    });
+  });
+
   it("stops paginating once a short page signals the last page", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ data: [{ id: 1, name: "Estágio X" }] }),
