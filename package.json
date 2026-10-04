@@ -22,6 +22,7 @@
     "fixture:infojobs": "tsx scripts/fixture-infojobs.ts",
     "fixture:nerdin": "tsx scripts/fixture-nerdin.ts",
     "fixture:vagas": "tsx scripts/fixture-vagas.ts",
+    "fixture:99jobs": "tsx --env-file-if-exists=.env scripts/fixture-99jobs.ts",
     "fixture:jooble": "tsx --env-file-if-exists=.env scripts/fixture-jooble.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",

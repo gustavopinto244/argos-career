@@ -69,6 +69,9 @@ export interface FetchWithDeadlineOptions {
   /** Names the source in error messages ("Gupy responded 503"). */
   readonly source: string;
   readonly maxResponseBytes?: number;
+  /** Optional extra headers for public APIs. The caller cannot replace the
+   * honest User-Agent enforced here. */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -154,7 +157,10 @@ export async function fetchWithDeadline(
     const timer = setTimeout(() => controller.abort(), options.timeoutMs);
     try {
       const response = await options.fetchImpl(url, {
-        headers: { "User-Agent": options.userAgent },
+        headers: {
+          ...options.headers,
+          "User-Agent": options.userAgent,
+        },
         signal: controller.signal,
       });
       if (response.ok || response.status < 500) {

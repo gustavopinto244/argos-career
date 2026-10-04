@@ -1,0 +1,26 @@
+[
+  {
+    "id": "900001",
+    "title": "Estágio em Desenvolvimento Backend",
+    "company": "Empresa Fictícia Um",
+    "description": "&lt;p&gt;Desenvolva APIs.&lt;/p&gt;&lt;p&gt;Conhecimento em TypeScript.&lt;/p&gt;",
+    "datePosted": "2026-10-01 10:30:00 -0300",
+    "validThrough": "2026-10-31",
+    "jobUrl": "https://99jobs.com/empresa-ficticia/jobs/900001-estagio-backend",
+    "city": "Rio de Janeiro",
+    "country": "BR",
+    "workMode": "hybrid"
+  },
+  {
+    "id": "900002",
+    "title": "Estágio em Segurança da Informação",
+    "company": "Empresa Fictícia Dois",
+    "description": "Apoio a monitoramento e resposta a incidentes.",
+    "datePosted": "2026-10-02T12:00:00Z",
+    "validThrough": null,
+    "jobUrl": "https://carreiras.99jobs.com/vagas/900002-estagio-seguranca",
+    "city": null,
+    "country": null,
+    "workMode": "remote"
+  }
+]

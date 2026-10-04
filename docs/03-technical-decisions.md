@@ -91,6 +91,7 @@ revisited on its merits instead of re-argued from memory.
 | [078](adr/078-recurring-gaps-in-the-digest.md)                                | The digest names which of a posting's gaps have already cost the operator others                          | Accepted   | 2026-08-30 |
 | [079](adr/079-infojobs-pays-for-what-it-reads.md)                             | InfoJobs is filtered by its own `Antiguedad` age facet before any detail page is fetched                  | Accepted   | 2026-09-01 |
 | [080](adr/080-vagas-collector.md)                                             | Vagas.com added as a source, applying ADR-079's cost lesson from day one                                  | Accepted   | 2026-09-01 |
+| [081](adr/081-99jobs-collector.md)                                            | Add 99jobs through public search, JSON-LD and its public browser-token API                                | Accepted   | 2026-10-04 |
 
 ## When an ADR is required
 

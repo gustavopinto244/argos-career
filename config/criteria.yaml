@@ -335,6 +335,22 @@ collection:
     - source: vagas
       isRemoteWork: true
       maxAgeDays: 7
+    # --- 99jobs (ADR-081), added 2026-10-04 -------------------------------
+    # The public search exposes a genuine Estágio level facet plus city and
+    # work-mode filters. Keep the term broad because the measured live stock
+    # is tiny: Rio returned one off-track sports posting; remote returned
+    # three postings, of which the only technical one is a still-listed bank
+    # of talents published in 2023. The source therefore contributes zero
+    # fresh on-track postings today, but these two cheap queries stay active
+    # to catch future inventory. Re-evaluate after two weeks of real runs.
+    - source: 99jobs
+      jobName: estágio
+      city: Rio de Janeiro
+      maxResults: 20
+    - source: 99jobs
+      jobName: estágio
+      isRemoteWork: true
+      maxResults: 20
     # --- Sólides: parked, and re-confirmed parked 2026-08-26 (ADR-070) -----
     # Remote queries were the obvious second chance -- the collector, schema,
     # normalizer and both registry entries are intact, and the normalizer
@@ -581,6 +597,7 @@ sourceDefaultCountry:
   catho: BR
   linkedin: BR
   vagas: BR
+  99jobs: BR
 
 # How far into the future a source's publishedAt is still trusted
 # (docs/audit AC-029). Beyond this, it is treated as an unreliable date --

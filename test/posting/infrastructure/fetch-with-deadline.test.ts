@@ -62,6 +62,30 @@ describe("fetchWithDeadline", () => {
     expect(headers["User-Agent"]).toBe(UA);
   });
 
+  it("merges extra headers without allowing the caller to replace User-Agent", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
+    await fetchWithDeadline(
+      "https://example.test/session",
+      options({
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        headers: {
+          Authorization: "Bearer public-client",
+          "User-Agent": "forged",
+        },
+      }),
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://example.test/session",
+      expect.objectContaining({
+        headers: {
+          Authorization: "Bearer public-client",
+          "User-Agent": UA,
+        },
+      }),
+    );
+  });
+
   // The defect this module exists for. Before it, `clearTimeout(timer)` ran
   // in a `finally` triggered by the headers arriving, so the body read had no
   // deadline at all and fell back to undici's 300s default — per request and

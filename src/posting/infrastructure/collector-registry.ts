@@ -3,6 +3,7 @@ import { CieeCollector } from "./ciee-collector";
 import { GupyCollector } from "./gupy-collector";
 import { InfoJobsCollector } from "./infojobs-collector";
 import { NerdinCollector } from "./nerdin-collector";
+import { NinetyNineJobsCollector } from "./ninetyninejobs-collector";
 import { SolidesCollector } from "./solides-collector";
 import { VagasCollector } from "./vagas-collector";
 
@@ -24,6 +25,7 @@ const COLLECTORS: ReadonlyMap<string, () => CollectorPort> = new Map([
   ["infojobs", () => new InfoJobsCollector() as CollectorPort],
   ["nerdin", () => new NerdinCollector()],
   ["vagas", () => new VagasCollector() as CollectorPort],
+  ["99jobs", () => new NinetyNineJobsCollector()],
 ]);
 
 /**
