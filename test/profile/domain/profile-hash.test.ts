@@ -72,3 +72,17 @@ describe("hashProfile", () => {
     });
   });
 });
+
+it("invalidates matching caches when start or duration is confirmed", () => {
+  const original = profile();
+  const now = new Date("2026-10-30");
+  expect(
+    hashProfile(
+      { ...original, startAvailability: "Disponível para início imediato." },
+      now,
+    ),
+  ).not.toBe(hashProfile(original, now));
+  expect(
+    hashProfile({ ...original, minimumInternshipMonths: 18 }, now),
+  ).not.toBe(hashProfile(original, now));
+});

@@ -85,6 +85,9 @@ const ProfileBaseSchema = z.object({
    * regardless of the true answer (docs/11-known-issues.md B9).
    */
   workAvailability: z.string().min(1),
+  /** Explicit declarations: neither follows from weekly hours or graduation. */
+  startAvailability: z.string().min(1).optional(),
+  minimumInternshipMonths: z.number().int().positive().optional(),
   competencies: z.array(CompetencySchema).min(1),
   resumeVariants: z.array(ResumeVariantSchema).min(1),
 });

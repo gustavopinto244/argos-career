@@ -89,6 +89,18 @@ function declaredFieldsEvidenceEntries(
       text: profile.workAvailability,
     });
   }
+  if (profile.startAvailability && profile.startAvailability !== UNVERIFIED) {
+    entries.push({
+      tag: "Start availability",
+      text: profile.startAvailability,
+    });
+  }
+  if (profile.minimumInternshipMonths !== undefined) {
+    entries.push({
+      tag: "Internship duration",
+      text: `Disponível para compromisso mínimo de ${profile.minimumInternshipMonths} meses de estágio.`,
+    });
+  }
   if (profile.minimumStipend !== UNVERIFIED) {
     entries.push({
       tag: "Compensation",

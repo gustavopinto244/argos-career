@@ -108,6 +108,7 @@ export const FIXED_TAG_TERMS: Readonly<Record<string, readonly string[]>> = {
     "periodo",
     "semestre",
     "formacao",
+    "formatura",
     "conclusao",
   ],
   "English level": ["ingles", "english"],
@@ -133,6 +134,7 @@ export const FIXED_TAG_TERMS: Readonly<Record<string, readonly string[]>> = {
   "Work availability": [
     "presencial",
     "hibrido",
+    "hibrida",
     "remoto",
     "remota",
     "home office",
@@ -144,6 +146,15 @@ export const FIXED_TAG_TERMS: Readonly<Record<string, readonly string[]>> = {
     "hybrid",
     "remote",
   ],
+  "Start availability": [
+    "inicio",
+    "iniciar",
+    "imediato",
+    "imediata",
+    "imediatamente",
+    "start",
+  ],
+  "Internship duration": ["meses", "duracao", "permanencia", "months"],
   Compensation: ["bolsa", "remuneracao", "salario", "stipend", "compensation"],
 };
 

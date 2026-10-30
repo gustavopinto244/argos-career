@@ -15,8 +15,8 @@ import { Requirement } from "../domain/types";
 export const STAGE_A_PROMPT_VERSION = "a-v5";
 export const STAGE_A_PROMPT_PATH = "./prompts/stage-a-extraction.v5.md";
 
-export const STAGE_B_PROMPT_VERSION = "b-v4";
-export const STAGE_B_PROMPT_PATH = "./prompts/stage-b-matching.v4.md";
+export const STAGE_B_PROMPT_VERSION = "b-v6";
+export const STAGE_B_PROMPT_PATH = "./prompts/stage-b-matching.v6.md";
 
 /**
  * The prompt files are Markdown documentation with one fenced code block

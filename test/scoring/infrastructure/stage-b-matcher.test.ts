@@ -95,7 +95,7 @@ describe("StageBMatcher.match — cache", () => {
       matchesRepo.find(
         "fp1",
         "hash1",
-        "b-v4",
+        "b-v6",
         "unknown",
         hashRequirements([requirement()]),
       ),
@@ -106,7 +106,7 @@ describe("StageBMatcher.match — cache", () => {
     matchesRepo.upsert(
       "fp1",
       "hash1",
-      "b-v4",
+      "b-v6",
       "unknown",
       hashRequirements([requirement()]),
       [{ requirement: requirement(), status: "not_met", evidence: null }],
@@ -138,7 +138,7 @@ describe("StageBMatcher.match — cache", () => {
     matchesRepo.upsert(
       "fp1",
       "hash1",
-      "b-v4",
+      "b-v6",
       "unknown",
       hashRequirements([requirement()]),
       [], // zero matches for a one-requirement key -- a count mismatch.
@@ -168,7 +168,7 @@ describe("StageBMatcher.match — cache", () => {
     matchesRepo.upsert(
       "fp1",
       "hash1",
-      "b-v4",
+      "b-v6",
       "unknown",
       hashRequirements([requirement()]),
       [
@@ -513,7 +513,7 @@ describe("StageBMatcher.match — evidence provenance (docs/audit AC-008)", () =
     const cached = matchesRepo.find(
       "fp1",
       "hash1",
-      "b-v4",
+      "b-v6",
       "unknown",
       hashRequirements([requirement()]),
     );
@@ -546,7 +546,7 @@ describe("StageBMatcher.match — failure, never throws", () => {
       },
     });
     expect(
-      matchesRepo.find("fp1", "hash1", "b-v4", "unknown", "any-hash"),
+      matchesRepo.find("fp1", "hash1", "b-v6", "unknown", "any-hash"),
     ).toBeNull();
   });
 
@@ -567,7 +567,7 @@ describe("StageBMatcher.match — failure, never throws", () => {
 
     expect(result.ok).toBe(false);
     expect(
-      matchesRepo.find("fp1", "hash1", "b-v4", "unknown", "any-hash"),
+      matchesRepo.find("fp1", "hash1", "b-v6", "unknown", "any-hash"),
     ).toBeNull();
   });
 
@@ -775,5 +775,68 @@ describe("StageBMatcher.match — bounded concurrency (ADR-022)", () => {
     expect(
       matchesRepo.find("fp1", "h", "b-v2", "unknown", "any-hash"),
     ).toBeNull();
+  });
+});
+
+describe("October declared-evidence regressions", () => {
+  it.each([
+    [
+      "Com formatura mínima prevista para 2028.2",
+      "[Academic enrollment] Cursando o 2º período de Sistemas de Informação na Universidade Exemplo, com conclusão prevista para 2029.2.",
+    ],
+    [
+      "Disponibilidade para atuar em escala híbrida na Barra da Tijuca - RJ",
+      "[Work availability] Disponível para trabalho presencial ou híbrido no Rio de Janeiro.",
+    ],
+  ])("retains a supported model answer for %s", async (text, evidence) => {
+    const ask = vi.fn(async () => JSON.stringify({ status: "met", evidence }));
+    const result = await new StageBMatcher(ask, matchesRepo).match(
+      "declared-regression",
+      [requirement({ text, category: "availability", weight: "blocking" })],
+      {
+        ...profile(),
+        workAvailability:
+          "Disponível para trabalho presencial ou híbrido no Rio de Janeiro.",
+      },
+      "hash",
+      () => NOW,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.matches[0]?.status).toBe("met");
+      expect(result.evidenceRejectedCount).toBe(0);
+    }
+  });
+});
+
+describe("explicit start and internship duration declarations", () => {
+  it.each([
+    [
+      "Disponibilidade para início imediato",
+      "[Start availability] Disponível para início imediato.",
+    ],
+    [
+      "Disponibilidade mínima para 18 meses de estágio",
+      "[Internship duration] Disponível para compromisso mínimo de 18 meses de estágio.",
+    ],
+  ])("accepts confirmed evidence for %s", async (text, evidence) => {
+    const confirmed = {
+      ...profile(),
+      startAvailability: "Disponível para início imediato.",
+      minimumInternshipMonths: 18,
+    };
+    const ask = vi.fn(async () => JSON.stringify({ status: "met", evidence }));
+    const result = await new StageBMatcher(ask, matchesRepo).match(
+      "confirmed-availability",
+      [requirement({ text, category: "availability", weight: "blocking" })],
+      confirmed,
+      "confirmed-hash",
+      () => NOW,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.matches[0]?.status).toBe("met");
+      expect(result.evidenceRejectedCount).toBe(0);
+    }
   });
 });

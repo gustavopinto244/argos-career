@@ -120,3 +120,30 @@ describe("formatEvidenceCatalog", () => {
     expect(formatEvidenceCatalog([])).toBe("");
   });
 });
+
+describe("optional start and commitment declarations", () => {
+  it("does not infer either declaration from hours and graduation", () => {
+    const entries = buildEvidenceCatalog(profile(), new Date("2026-10-30"));
+    expect(
+      entries.some(
+        (e) =>
+          e.tag === "Start availability" || e.tag === "Internship duration",
+      ),
+    ).toBe(false);
+  });
+  it("renders explicitly confirmed declarations", () => {
+    const declared = profile({
+      startAvailability: "Disponível para início imediato.",
+      minimumInternshipMonths: 18,
+    });
+    expect(buildEvidenceCatalog(declared, new Date("2026-10-30"))).toEqual(
+      expect.arrayContaining([
+        { tag: "Start availability", text: "Disponível para início imediato." },
+        {
+          tag: "Internship duration",
+          text: "Disponível para compromisso mínimo de 18 meses de estágio.",
+        },
+      ]),
+    );
+  });
+});
