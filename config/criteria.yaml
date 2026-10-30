@@ -34,6 +34,16 @@
 # -- corrected after measuring, not left as the first guess.
 collection:
   queries:
+    # Measured 2026-10-30: these find the DPO and TI Infra roles beyond the
+    # generic Rio queries' 50-result cap. Remote queries use workplaceType.
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: privacidade
+      city: Rio de Janeiro
+    - source: gupy
+      type: vacancy_type_internship
+      jobName: TI
+      city: Rio de Janeiro
     # Explicit QA and IT-support discovery, retaining internship/location gates.
     - source: gupy
       type: vacancy_type_internship
@@ -701,6 +711,11 @@ tracks:
     # technology names, so an English-titled dev role classified `unknown`.
     - developer
   security:
+    # Confirmed missed titles in the October production audit (ADR-082).
+    - governança de si
+    - privacidade
+    - proteção de dados
+    - dpo
     - segurança
     - security
     - infraestrutura
@@ -769,6 +784,7 @@ tracks:
   # Atendimento ao Cliente" -- a customer-support role, not a data role).
   # None of the five phrases below match either false positive.
   data:
+    - integração de dados
     - análise de dados
     - data analytics
     - pessoa estagiária de dados
@@ -793,6 +809,7 @@ tracks:
 trackExclusions:
   dev:
     - desenvolvimento de embalagens
+    - desenvolvimento profissional
     - desenvolvimento humano
     - desenvolvimento organizacional
     - treinamento e desenvolvimento
@@ -1015,3 +1032,4 @@ alerts:
     infojobs: 72
     indeed: 36
     linkedin: 96
+    vagas: 96

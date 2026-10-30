@@ -402,6 +402,10 @@ export async function executeCollect(
           posting.publishedAt !== null &&
           posting.publishedAt.getTime() < cutoff.getTime()
         ) {
+          // Recency gates discovery, not evidence that a stored vacancy is
+          // still advertised. Otherwise ADR-066's lastSeenAt rescue can never
+          // work for dated in-process sources after their first day.
+          postingsRepo.markSeenIfPresent(posting.fingerprint, collectedAt);
           tooOld += 1;
           // Collection had no posting_events coverage at all before this
           // (docs/audit PR-021) — a posting dropped here previously left

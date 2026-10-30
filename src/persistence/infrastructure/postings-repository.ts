@@ -116,6 +116,21 @@ function rowToPosting(row: PostingRow): Posting {
 export class PostingsRepository {
   constructor(private readonly db: Db) {}
 
+  /** A live sighting remains evidence even outside the new-posting window.
+   * UPDATE only: never import stale inventory or change firstSeenAt. */
+  markSeenIfPresent(fingerprint: string, seenAt: Date): void {
+    this.db
+      .update(postings)
+      .set({ lastSeenAt: seenAt })
+      .where(
+        and(
+          eq(postings.fingerprint, fingerprint),
+          lt(postings.lastSeenAt, seenAt),
+        ),
+      )
+      .run();
+  }
+
   upsert(posting: Posting): UpsertResult {
     return this.db.transaction((tx) => this.upsertIn(tx, posting));
   }

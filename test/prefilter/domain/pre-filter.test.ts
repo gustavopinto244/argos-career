@@ -1045,3 +1045,28 @@ describe("applyPreFilter — keyword adherence matches whole words, not substrin
     expect(outcome.passed).toBe(true);
   });
 });
+
+describe("LinkedIn metro-region labels", () => {
+  it("accepts Greater Rio de Janeiro within the configured Rio region", () => {
+    expect(
+      applyPreFilter(
+        posting({
+          location: { kind: "known", city: "Greater Rio de Janeiro" },
+        }),
+        baseCriteria(),
+        [],
+        NOW,
+      ).passed,
+    ).toBe(true);
+  });
+  it("keeps Greater São Paulo outside the accepted region", () => {
+    expect(
+      applyPreFilter(
+        posting({ location: { kind: "known", city: "Greater São Paulo" } }),
+        baseCriteria(),
+        [],
+        NOW,
+      ).reason,
+    ).toBe("location_not_allowed");
+  });
+});

@@ -63,7 +63,8 @@ function buildUrl(
   if (criteria.city) url.searchParams.set("city", criteria.city);
   if (criteria.type) url.searchParams.set("type", criteria.type);
   if (criteria.isRemoteWork !== undefined) {
-    url.searchParams.set("isRemoteWork", String(criteria.isRemoteWork));
+    // The current portal ignores the retired isRemoteWork query parameter.
+    if (criteria.isRemoteWork) url.searchParams.set("workplaceType", "remote");
   }
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("offset", String(offset));

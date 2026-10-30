@@ -92,6 +92,7 @@ revisited on its merits instead of re-argued from memory.
 | [079](adr/079-infojobs-pays-for-what-it-reads.md)                             | InfoJobs is filtered by its own `Antiguedad` age facet before any detail page is fetched                  | Accepted   | 2026-09-01 |
 | [080](adr/080-vagas-collector.md)                                             | Vagas.com added as a source, applying ADR-079's cost lesson from day one                                  | Accepted   | 2026-09-01 |
 | [081](adr/081-99jobs-collector.md)                                            | Add 99jobs through public search, JSON-LD and its public browser-token API                                | Accepted   | 2026-10-04 |
+| [082](adr/082-october-discovery-and-evidence-recovery.md)                     | Recover remote discovery, narrow title routing and declared profile evidence                              | Accepted   | 2026-10-30 |
 
 ## When an ADR is required
 

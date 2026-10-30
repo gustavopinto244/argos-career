@@ -469,6 +469,44 @@ describe("executeCollect — recency window (ADR-019)", () => {
     expect(outcome.tooOld).toBe(0);
   });
 
+  it("refreshes existing sightings outside recency without importing stale vacancies", async () => {
+    const payload = datedPayload(
+      70,
+      "Estágio em Backend",
+      "2026-08-01T12:00:00Z",
+    );
+    const first = new Date("2026-08-02T12:00:00Z");
+    await executeCollect(
+      db,
+      () => collectorWith([payload]),
+      [{}],
+      () => first,
+      0,
+    );
+    const before = new PostingsRepository(db).findActive()[0]!;
+    const now = new Date("2026-08-15T12:00:00Z");
+    const result = await executeCollect(
+      db,
+      () =>
+        collectorWith([
+          payload,
+          datedPayload(71, "Estágio Nunca Visto", "2026-08-01T12:00:00Z"),
+        ]),
+      [{}],
+      () => now,
+      0,
+      WINDOW,
+    );
+    const after = new PostingsRepository(db).findByFingerprint(
+      before.fingerprint,
+    )!;
+    expect(result.tooOld).toBe(2);
+    expect(result.isNew).toBe(0);
+    expect(after.lastSeenAt).toEqual(now);
+    expect(after.firstSeenAt).toEqual(first);
+    expect(new PostingsRepository(db).findActive()).toHaveLength(1);
+  });
+
   it("applies no window at all when none is configured", async () => {
     const outcome = await executeCollect(
       db,
