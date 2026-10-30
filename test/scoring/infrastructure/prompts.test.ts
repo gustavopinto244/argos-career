@@ -50,7 +50,7 @@ describe("prompt version constants", () => {
 
   it("are pinned to the current versions", () => {
     expect(STAGE_A_PROMPT_VERSION).toBe("a-v5");
-    expect(STAGE_B_PROMPT_VERSION).toBe("b-v4");
+    expect(STAGE_B_PROMPT_VERSION).toBe("b-v6");
   });
 });
 

@@ -27,6 +27,10 @@ maxWeeklyHours: "⚠ VERIFY"
 # trabalho remoto em qualquer lugar do mundo."
 workAvailability: "⚠ VERIFY"
 
+# Optional, only when explicitly confirmed; omit if unknown.
+# startAvailability: "Disponível para início imediato."
+# minimumInternshipMonths: 18
+
 competencies:
   - name: TypeScript
     tracks: [dev]
