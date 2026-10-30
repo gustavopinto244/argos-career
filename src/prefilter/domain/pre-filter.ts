@@ -245,7 +245,13 @@ function isLocationAllowed(posting: Posting, criteria: Criteria): boolean {
     return !criteria.location.nationwideSources.includes(posting.source);
   }
 
-  const normalizedCity = normalize(posting.location.city);
+  // LinkedIn labels the accepted metro region in English. Keep this exact:
+  // stripping Greater from arbitrary cities would broaden geography silently.
+  const rawCity = normalize(posting.location.city);
+  const normalizedCity =
+    rawCity === "greater rio de janeiro"
+      ? normalize("Rio de Janeiro")
+      : rawCity;
   return criteria.location.cities.some(
     (city) => normalize(city) === normalizedCity,
   );

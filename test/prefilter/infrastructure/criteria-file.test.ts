@@ -1,3 +1,4 @@
+import { classifyTrack } from "../../../src/prefilter/domain/classify-track";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadCriteria } from "../../../src/prefilter/infrastructure/criteria-loader";
@@ -91,5 +92,27 @@ describe("config/criteria.yaml", () => {
       );
       expect(stale).toEqual([]);
     });
+  });
+});
+
+describe("October discovery regression titles", () => {
+  const criteria = loadCriteria(join(process.cwd(), "config", "criteria.yaml"));
+  it.each([
+    ["Pessoa Estagiária de Governança de SI", "security"],
+    ["Estagiário de Privacidade e Proteção de Dados - DPO", "security"],
+    ["Estagiário em Integração de Dados | SQL e SSIS", "data"],
+  ])("routes %s to %s", (title, track) => {
+    expect(
+      classifyTrack(title, criteria.tracks, criteria.trackExclusions),
+    ).toContain(track);
+  });
+  it.each([
+    "ESTAGIÁRIO NA ÁREA DE MARKETING (Prospera Desenvolvimento Profissional)",
+    "Estágio de Segurança do Trabalho",
+    "Estágio Administrativo (Dados)",
+  ])("does not route unrelated title %s", (title) => {
+    expect(
+      classifyTrack(title, criteria.tracks, criteria.trackExclusions),
+    ).toEqual([]);
   });
 });

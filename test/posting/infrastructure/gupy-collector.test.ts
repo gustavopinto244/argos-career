@@ -258,7 +258,7 @@ describe("GupyCollector — successful collection", () => {
       jobName: "estágio backend",
       city: "Rio de Janeiro",
       type: "vacancy_type_internship",
-      isRemoteWork: "true",
+      workplaceType: "remote",
       limit: "7",
       offset: "0",
     });
